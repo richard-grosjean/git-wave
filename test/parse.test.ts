@@ -12,6 +12,7 @@ test('parseDecorations classifies refs', () => {
     { kind: 'branch', name: 'feature/x' },
   ]);
   assert.deepEqual(parseDecorations('HEAD', []), [{ kind: 'head', name: 'HEAD', isHead: true }]);
+  assert.deepEqual(parseDecorations('refs/stash, main', []), [{ kind: 'branch', name: 'main' }]);
   assert.deepEqual(parseDecorations('', []), []);
 });
 

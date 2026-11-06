@@ -34,7 +34,9 @@ export function parseDecorations(d: string, remotes: readonly string[]): Ref[] {
   for (const raw of d.split(', ')) {
     const item = raw.trim();
     if (!item) continue;
-    if (item === 'HEAD') {
+    if (item === 'refs/stash' || item.startsWith('refs/stash')) {
+      continue; // stash refs are attached separately from `git stash list`
+    } else if (item === 'HEAD') {
       refs.push({ kind: 'head', name: 'HEAD', isHead: true });
     } else if (item.startsWith('HEAD -> ')) {
       refs.push({ kind: 'branch', name: item.slice(8), isHead: true });

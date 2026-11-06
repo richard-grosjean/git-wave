@@ -2,6 +2,26 @@
 
 A fast git graph with worktrees.
 
+[![CI](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml)
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/richard-grosjean.git-wave?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=richard-grosjean.git-wave)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+![Git Wave showing a branch graph with a locked worktree, a stash, tags and the uncommitted changes row](media/screenshot.png)
+
+## Why
+
+Git Graph is unmaintained, GitLens is heavy, and neither treats worktrees as first-class.
+Git Wave is a small, dependency-free extension that draws the graph on a canvas, renders only the
+rows on screen, and puts worktrees (including what is locked, and why) right in the picture.
+
+## Install
+
+Search for **Git Wave** in the Extensions view, or:
+
+```sh
+code --install-extension richard-grosjean.git-wave
+```
+
 - **Graph view** in the familiar lanes-and-curves style: branches, tags, remotes, and HEAD on a
   canvas-drawn graph with a virtualized commit list. Only the rows on screen are ever rendered,
   so 100k-commit repositories scroll smoothly.
@@ -61,6 +81,17 @@ npm run watch        # rebuild on change
 
 Press `F5` in VS Code to launch an Extension Development Host with Git Wave loaded.
 `npm run package` produces a `.vsix` you can install with `code --install-extension`.
+
+### Releasing
+
+```sh
+npm run release -- minor     # or patch / major / 1.2.3
+```
+
+That bumps the version, stamps the changelog, commits, tags `vX.Y.Z` and pushes. The Release
+workflow then runs the tests, publishes to the Marketplace, and attaches the `.vsix` to a GitHub
+release. It needs a `VSCE_PAT` repository secret (an Azure DevOps token with the
+*Marketplace (Manage)* scope).
 
 ### How the graph is laid out
 

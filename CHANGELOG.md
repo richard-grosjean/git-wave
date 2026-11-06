@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Marketplace readiness: screenshot, CI, tag-triggered release workflow, release script.
+- Fix: stash commits no longer show a stray `refs/stash` branch chip.
+
 ## 0.2.0
 
 - Uncommitted changes row with working-tree diffs; refreshes as files change.

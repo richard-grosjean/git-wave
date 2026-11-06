@@ -1,0 +1,42 @@
+name: Release
+
+# Tag a version (e.g. `git tag v0.3.0 && git push --tags`) to publish to the Marketplace
+# and attach the .vsix to a GitHub release. Needs a VSCE_PAT repository secret: an Azure DevOps
+# personal access token with the "Marketplace (Manage)" scope for the publisher.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check tag matches package version
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${PKG}" >&2
+            exit 1
+          fi
+      - run: npm run build -- --production
+      - run: npx vsce package --no-dependencies
+      - name: Publish to Marketplace
+        run: npx vsce publish --no-dependencies --packagePath *.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
+          generate_release_notes: true

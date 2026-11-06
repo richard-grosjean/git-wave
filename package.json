@@ -33,6 +33,21 @@
   ],
   "main": "./dist/extension.js",
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0b1220",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "extensionKind": [
+    "workspace"
+  ],
+  "badges": [
+    {
+      "url": "https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml/badge.svg",
+      "href": "https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml",
+      "description": "CI"
+    }
+  ],
   "activationEvents": [
     "workspaceContains:.git",
     "workspaceContains:**/.git"
@@ -757,7 +772,8 @@
     "package": "node esbuild.mjs --production && vsce package",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test out-test/",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
