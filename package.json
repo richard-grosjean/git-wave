@@ -771,7 +771,7 @@
     "watch": "node esbuild.mjs --watch",
     "package": "node esbuild.mjs --production && vsce package",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test out-test/",
+    "test": "tsc -p tsconfig.test.json && node --test \"out-test/test/*.test.js\"",
     "lint": "tsc -p tsconfig.json --noEmit",
     "release": "node scripts/release.mjs"
   },
