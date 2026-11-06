@@ -1,0 +1,323 @@
+{
+  "name": "git-wave",
+  "displayName": "Git Wave",
+  "description": "A fast git graph with worktrees. Lightweight, canvas-drawn history with lock-aware worktree management.",
+  "version": "0.1.0",
+  "publisher": "richard-grosjean",
+  "license": "MIT",
+  "author": {
+    "name": "Richard Grosjean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richard-grosjean/git-wave.git"
+  },
+  "bugs": {
+    "url": "https://github.com/richard-grosjean/git-wave/issues"
+  },
+  "homepage": "https://github.com/richard-grosjean/git-wave#readme",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Visualization"
+  ],
+  "keywords": [
+    "git",
+    "graph",
+    "worktree",
+    "branch",
+    "history"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "workspaceContains:.git",
+    "workspaceContains:**/.git"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitwave.open",
+        "title": "View Git Graph",
+        "category": "Git Wave",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitwave.refresh",
+        "title": "Refresh Graph",
+        "category": "Git Wave",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitwave.worktrees.refresh",
+        "title": "Refresh Worktrees",
+        "category": "Git Wave",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitwave.worktree.add",
+        "title": "Add Worktree…",
+        "category": "Git Wave",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitwave.worktree.prune",
+        "title": "Prune Worktrees",
+        "category": "Git Wave",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "gitwave.worktree.lock",
+        "title": "Lock Worktree…",
+        "category": "Git Wave",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "gitwave.worktree.unlock",
+        "title": "Unlock Worktree",
+        "category": "Git Wave",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "gitwave.worktree.remove",
+        "title": "Remove Worktree",
+        "category": "Git Wave",
+        "icon": "$(close)"
+      },
+      {
+        "command": "gitwave.worktree.open",
+        "title": "Open Worktree in Current Window",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.worktree.openNewWindow",
+        "title": "Open Worktree in New Window",
+        "category": "Git Wave",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "gitwave.worktree.copyPath",
+        "title": "Copy Worktree Path",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.worktree.revealInGraph",
+        "title": "Reveal in Git Graph",
+        "category": "Git Wave"
+      }
+    ],
+    "views": {
+      "scm": [
+        {
+          "id": "gitwave.worktrees",
+          "name": "Worktrees",
+          "icon": "$(folder-library)",
+          "contextualTitle": "Git Wave Worktrees",
+          "when": "gitwave.hasRepo"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gitwave.worktrees",
+        "contents": "No worktrees found.\n[Add Worktree](command:gitwave.worktree.add)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "gitwave.open",
+          "group": "navigation@1",
+          "when": "gitwave.hasRepo"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gitwave.worktree.add",
+          "when": "view == gitwave.worktrees",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitwave.open",
+          "when": "view == gitwave.worktrees",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitwave.worktrees.refresh",
+          "when": "view == gitwave.worktrees",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitwave.worktree.prune",
+          "when": "view == gitwave.worktrees",
+          "group": "1_manage"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitwave.worktree.unlock",
+          "when": "view == gitwave.worktrees && viewItem =~ /locked/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitwave.worktree.lock",
+          "when": "view == gitwave.worktrees && viewItem =~ /unlocked/ && viewItem =~ /linked/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitwave.worktree.openNewWindow",
+          "when": "view == gitwave.worktrees",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitwave.worktree.open",
+          "when": "view == gitwave.worktrees",
+          "group": "1_open@1"
+        },
+        {
+          "command": "gitwave.worktree.openNewWindow",
+          "when": "view == gitwave.worktrees",
+          "group": "1_open@2"
+        },
+        {
+          "command": "gitwave.worktree.revealInGraph",
+          "when": "view == gitwave.worktrees",
+          "group": "1_open@3"
+        },
+        {
+          "command": "gitwave.worktree.lock",
+          "when": "view == gitwave.worktrees && viewItem =~ /unlocked/ && viewItem =~ /linked/",
+          "group": "2_lock@1"
+        },
+        {
+          "command": "gitwave.worktree.unlock",
+          "when": "view == gitwave.worktrees && viewItem =~ /locked/",
+          "group": "2_lock@1"
+        },
+        {
+          "command": "gitwave.worktree.copyPath",
+          "when": "view == gitwave.worktrees",
+          "group": "3_misc@1"
+        },
+        {
+          "command": "gitwave.worktree.remove",
+          "when": "view == gitwave.worktrees && viewItem =~ /linked/",
+          "group": "4_danger@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitwave.worktree.lock",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.unlock",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.remove",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.open",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.openNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.worktree.revealInGraph",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Git Wave",
+      "properties": {
+        "gitwave.commitsPerPage": {
+          "type": "number",
+          "default": 500,
+          "minimum": 50,
+          "description": "Commits fetched per page. More are loaded as you scroll."
+        },
+        "gitwave.showRemoteBranches": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include remote-tracking branches in the graph."
+        },
+        "gitwave.showTags": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include tags in the graph."
+        },
+        "gitwave.dateFormat": {
+          "type": "string",
+          "enum": [
+            "relative",
+            "absolute",
+            "iso"
+          ],
+          "default": "relative",
+          "description": "How commit dates are displayed."
+        },
+        "gitwave.graph.laneWidth": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8,
+          "maximum": 32,
+          "description": "Horizontal pixels per graph lane."
+        },
+        "gitwave.graph.rowHeight": {
+          "type": "number",
+          "default": 24,
+          "minimum": 16,
+          "maximum": 48,
+          "description": "Row height in pixels."
+        },
+        "gitwave.graph.colors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "#4e9bff",
+            "#f78166",
+            "#56d364",
+            "#e3b341",
+            "#bc8cff",
+            "#39c5cf",
+            "#ff7eb6",
+            "#8ab4f8",
+            "#d2a8ff",
+            "#7ee787"
+          ],
+          "description": "Lane colors, cycled in order."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node esbuild.mjs --production && vsce package",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test out-test/",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vscode/codicons": "^0.0.36",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

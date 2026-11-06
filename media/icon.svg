@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15243a"/><stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="url(#bg)"/>
+  <!-- faint background waves -->
+  <g fill="none" stroke="#2a3f63" stroke-width="2" opacity="0.6">
+    <path d="M-4 96 C20 84 36 108 64 96 S108 84 132 96"/>
+    <path d="M-4 110 C20 98 36 122 64 110 S108 98 132 110"/>
+  </g>
+  <!-- lanes -->
+  <g fill="none" stroke-width="6" stroke-linecap="round">
+    <path d="M40 24 V104" stroke="#4e9bff"/>
+    <path d="M40 40 C40 58 88 50 88 68 V80 C88 98 40 90 40 104" stroke="#39c5cf"/>
+    <path d="M40 60 C40 74 64 70 64 84" stroke="#56d364"/>
+  </g>
+  <!-- nodes -->
+  <g stroke="#0b1220" stroke-width="3">
+    <circle cx="40" cy="24" r="8" fill="#8ab4f8"/>
+    <circle cx="40" cy="60" r="8" fill="#4e9bff"/>
+    <circle cx="88" cy="68" r="8" fill="#39c5cf"/>
+    <circle cx="64" cy="84" r="7" fill="#56d364"/>
+    <circle cx="40" cy="104" r="8" fill="#4e9bff"/>
+  </g>
+</svg>
