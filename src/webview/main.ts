@@ -1,11 +1,15 @@
-import type { Commit, CommitDetail, Edge, GraphConfig, HostMessage, Row, WebviewMessage, Worktree } from '../shared/types';
+import { UNCOMMITTED, type Commit, type CommitDetail, type CommitFile, type Edge, type GraphConfig, type HostMessage, type Row, type WebviewMessage, type Worktree } from '../shared/types';
 
 declare function acquireVsCodeApi(): { postMessage(m: WebviewMessage): void; getState(): unknown; setState(s: unknown): void };
 const vscode = acquireVsCodeApi();
 const post = (m: WebviewMessage) => vscode.postMessage(m);
 
+interface PersistedState { colAuthor?: number; colDate?: number }
+const persisted: PersistedState = (vscode.getState() as PersistedState | undefined) ?? {};
+const persist = () => vscode.setState(persisted);
+
 // ---------- state ----------
-let config: GraphConfig = { laneWidth: 14, rowHeight: 24, colors: ['#4e9bff'], dateFormat: 'relative' };
+let config: GraphConfig = { laneWidth: 14, rowHeight: 24, colors: ['#4e9bff'], dateFormat: 'relative', avatars: true, visibleLanes: 12 };
 let commits: Commit[] = [];
 let rows: Row[] = [];
 let tail: Edge[] = [];
@@ -16,28 +20,37 @@ let worktrees: Worktree[] = [];
 let worktreesByHead = new Map<string, Worktree[]>();
 let worktreesByBranch = new Map<string, Worktree>();
 let indexByHash = new Map<string, number>();
+let avatars = new Map<string, string>();
+const avatarFailed = new Set<string>();
 let selected: string | null = null;
 let pendingReveal: string | null = null;
 let revealAttempts = 0;
 let headHash: string | null = null;
+let graphX = 0; // horizontal scroll offset of the graph column, in px
+let currentRepo = '';
 
 // ---------- DOM ----------
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <div id="toolbar">
     <select id="repo" title="Repository"></select>
-    <input id="filter" type="search" placeholder="Filter by message, author or hash…" spellcheck="false">
+    <input id="filter" type="search" placeholder="Filter by message, author, hash or ref…" spellcheck="false">
     <span id="count"></span>
     <span id="spinner" class="codicon codicon-loading codicon-modifier-spin" hidden></span>
+    <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span></button>
     <button id="refresh" class="icon-btn" title="Refresh"><span class="codicon codicon-refresh"></span></button>
   </div>
   <div id="header">
-    <div class="c-graph">Graph</div><div class="c-desc">Description</div><div class="c-author">Author</div><div class="c-date">Date</div><div class="c-hash">Commit</div>
+    <div class="c-graph">Graph</div><div class="c-desc">Description</div>
+    <div class="c-author">Author<span class="resize" data-col="colAuthor"></span></div>
+    <div class="c-date">Date<span class="resize" data-col="colDate"></span></div>
+    <div class="c-hash">Commit</div>
   </div>
   <div id="scroller" tabindex="0">
     <div id="spacer"></div>
-    <canvas id="graph"></canvas>
     <div id="rows"></div>
+    <canvas id="graph"></canvas>
+    <div id="hscroll" hidden><div id="hspacer"></div></div>
     <div id="empty" hidden>No commits.</div>
   </div>
   <div id="detail" hidden>
@@ -54,23 +67,36 @@ app.innerHTML = `
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const scroller = $<HTMLDivElement>('scroller');
 const spacer = $('spacer');
-const canvas = $('graph') as HTMLCanvasElement;
+const canvas = $<HTMLCanvasElement>('graph');
 const rowsEl = $('rows');
-const repoSel = $('repo') as HTMLSelectElement;
-const filterEl = $('filter') as HTMLInputElement;
+const hscroll = $('hscroll');
+const hspacer = $('hspacer');
+const repoSel = $<HTMLSelectElement>('repo');
+const filterEl = $<HTMLInputElement>('filter');
 const detailEl = $('detail');
 const ctx2d = canvas.getContext('2d')!;
 
-// Filtering produces a view: list of commit indices to show.
 let view: number[] = [];
 let filterText = '';
 
+const PAD = 8;
+function graphVisibleWidth(): number {
+  return Math.max(3, Math.min(maxLanes, config.visibleLanes)) * config.laneWidth + PAD * 2;
+}
+function graphFullWidth(): number {
+  return Math.max(3, maxLanes) * config.laneWidth + PAD * 2;
+}
+
 function applyCss(): void {
-  const graphW = Math.max(3, Math.min(maxLanes, 24)) * config.laneWidth + 16;
-  // Set on :root so --cols (declared there) resolves against the live values.
   const root = document.documentElement.style;
   root.setProperty('--row-h', `${config.rowHeight}px`);
-  root.setProperty('--graph-w', `${graphW}px`);
+  root.setProperty('--graph-w', `${graphVisibleWidth()}px`);
+  root.setProperty('--col-author', `${persisted.colAuthor ?? 170}px`);
+  root.setProperty('--col-date', `${persisted.colDate ?? 130}px`);
+  const scrollable = graphFullWidth() > graphVisibleWidth();
+  hscroll.hidden = !scrollable;
+  hspacer.style.width = `${graphFullWidth()}px`;
+  if (!scrollable) graphX = 0;
 }
 
 function rebuildView(): void {
@@ -86,7 +112,8 @@ function rebuildView(): void {
   }
   spacer.style.height = `${view.length * config.rowHeight + (hasMore ? config.rowHeight : 0)}px`;
   $('empty').hidden = view.length > 0 || loading;
-  $('count').textContent = q ? `${view.length} / ${commits.length}` : `${commits.length}${hasMore ? '+' : ''}`;
+  const real = commits.length - (commits[0]?.hash === UNCOMMITTED ? 1 : 0);
+  $('count').textContent = q ? `${view.length} / ${real}` : `${real}${hasMore ? '+' : ''}`;
   render();
 }
 
@@ -105,7 +132,6 @@ function render(): void {
   const last = Math.min(view.length - 1, Math.ceil((top + height) / rowH) + 4);
   const filtered = filterText.trim().length > 0;
 
-  // Rows (pooled DOM nodes)
   let used = 0;
   for (let v = first; v <= last; v++) {
     const i = view[v]!;
@@ -118,22 +144,21 @@ function render(): void {
     el.dataset.hash = c.hash;
     el.classList.toggle('selected', c.hash === selected);
     el.classList.toggle('head', c.hash === headHash);
+    el.classList.toggle('uncommitted', c.hash === UNCOMMITTED);
     fillRow(el, c, rows[i]!);
   }
   for (let k = used; k < pool.length; k++) pool[k]!.hidden = true;
 
-  // Graph canvas (hidden while filtering: lanes don't make sense for a sparse subset)
   canvas.hidden = filtered;
+  hscroll.hidden = filtered || graphFullWidth() <= graphVisibleWidth();
   if (!filtered) drawGraph(first, last, top, height);
-
-  // Infinite scroll
   if (hasMore && !loading && last >= view.length - 60) post({ type: 'loadMore' });
 }
 
 function createRowEl(): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'row';
-  el.innerHTML = '<div class="c-graph"></div><div class="c-desc"><span class="refs"></span><span class="subject"></span></div><div class="c-author"></div><div class="c-date"></div><div class="c-hash mono"></div>';
+  el.innerHTML = '<div class="c-graph"></div><div class="c-desc"><span class="refs"></span><span class="subject"></span></div><div class="c-author"><span class="avatar"></span><span class="name"></span></div><div class="c-date"></div><div class="c-hash mono"></div>';
   return el;
 }
 
@@ -141,14 +166,63 @@ function fillRow(el: HTMLDivElement, c: Commit, row: Row): void {
   const desc = el.children[1] as HTMLElement;
   const refs = desc.children[0] as HTMLElement;
   const subject = desc.children[1] as HTMLElement;
+  const authorCell = el.children[2] as HTMLElement;
+  const avatarEl = authorCell.children[0] as HTMLElement;
+  const nameEl = authorCell.children[1] as HTMLElement;
+  const dateEl = el.children[3] as HTMLElement;
+  const hashEl = el.children[4] as HTMLElement;
   const color = config.colors[row.color % config.colors.length] ?? '#888';
-  refs.replaceChildren(...refChips(c, color));
   subject.textContent = c.subject;
-  (el.children[2] as HTMLElement).textContent = c.author;
-  (el.children[2] as HTMLElement).title = `${c.author} <${c.email}>`;
-  (el.children[3] as HTMLElement).textContent = formatDate(c.date);
-  (el.children[3] as HTMLElement).title = new Date(c.date * 1000).toLocaleString();
-  (el.children[4] as HTMLElement).textContent = c.hash.slice(0, 8);
+  if (c.hash === UNCOMMITTED) {
+    refs.replaceChildren();
+    el.dataset.vscodeContext = JSON.stringify({ webviewSection: 'uncommitted', preventDefaultContextMenuItems: true });
+    avatarEl.replaceChildren();
+    avatarEl.className = 'avatar';
+    nameEl.textContent = '';
+    dateEl.textContent = '';
+    dateEl.title = '';
+    hashEl.textContent = '';
+    return;
+  }
+  refs.replaceChildren(...refChips(c, color));
+  el.dataset.vscodeContext = JSON.stringify({ webviewSection: 'commit', hash: c.hash, subject: c.subject, preventDefaultContextMenuItems: true });
+  renderAvatar(avatarEl, c);
+  nameEl.textContent = c.author;
+  authorCell.title = `${c.author} <${c.email}>`;
+  dateEl.textContent = formatDate(c.date);
+  dateEl.title = new Date(c.date * 1000).toLocaleString();
+  hashEl.textContent = c.hash.slice(0, 8);
+}
+
+function renderAvatar(el: HTMLElement, c: Commit): void {
+  if (!config.avatars) { el.className = 'avatar'; el.replaceChildren(); return; }
+  const url = avatars.get(c.email.toLowerCase());
+  const key = `${url ?? ''}|${c.author}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  if (url && !avatarFailed.has(url)) {
+    const img = document.createElement('img');
+    img.src = url; img.alt = ''; img.loading = 'lazy'; img.draggable = false;
+    img.onerror = () => { avatarFailed.add(url); el.dataset.key = ''; renderAvatar(el, c); };
+    el.className = 'avatar';
+    el.replaceChildren(img);
+  } else {
+    el.className = 'avatar initials';
+    el.style.setProperty('--hue', `${hashHue(c.email || c.author)}`);
+    el.textContent = initials(c.author);
+  }
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+function hashHue(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
 }
 
 function refChips(c: Commit, color: string): HTMLElement[] {
@@ -158,38 +232,48 @@ function refChips(c: Commit, color: string): HTMLElement[] {
     const chip = document.createElement('span');
     chip.className = `chip ${r.kind}${r.isHead ? ' is-head' : ''}`;
     chip.style.setProperty('--chip', color);
-    const icon = r.kind === 'tag' ? 'tag' : r.kind === 'remote' ? 'cloud' : 'git-branch';
+    const icon = r.kind === 'tag' ? 'tag' : r.kind === 'remote' ? 'cloud' : r.kind === 'stash' ? 'archive' : 'git-branch';
     chip.innerHTML = `<span class="codicon codicon-${icon}"></span>`;
     chip.append(r.name);
-    chip.title = r.kind === 'remote' ? `Remote branch ${r.name}` : r.kind === 'tag' ? `Tag ${r.name}` : `Branch ${r.name}${r.isHead ? ' (HEAD)' : ''}`;
+    const ctx: Record<string, unknown> = { webviewSection: r.kind === 'head' ? 'commit' : r.kind, name: r.name, hash: c.hash, isHead: !!r.isHead, preventDefaultContextMenuItems: true };
+    if (r.kind === 'stash') {
+      const m = /\{(\d+)\}/.exec(r.name);
+      ctx.stashIndex = m ? Number(m[1]) : 0;
+    }
+    chip.title = r.kind === 'remote' ? `Remote branch ${r.name}` : r.kind === 'tag' ? `Tag ${r.name}` : r.kind === 'stash' ? `Stash ${r.name}` : `Branch ${r.name}${r.isHead ? ' (HEAD)' : ''}`;
     const wt = r.kind === 'branch' ? worktreesByBranch.get(r.name) : undefined;
     if (wt) {
-      // A branch checked out in a worktree: fold the worktree badge into the branch chip.
       shownWorktrees.add(wt.path);
       chip.classList.add('has-worktree', wt.locked ? 'locked' : 'unlocked');
       chip.append(worktreeBadge(wt));
       chip.title += `\nWorktree: ${wt.path}${wt.locked ? `\n🔒 Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : ''}\nClick the folder icon for actions`;
     }
+    chip.dataset.vscodeContext = JSON.stringify(ctx);
     out.push(chip);
   }
   for (const wt of worktreesByHead.get(c.hash) ?? []) {
     if (shownWorktrees.has(wt.path)) continue;
-    // Detached worktree (or branch not decorated): its own chip.
     const chip = document.createElement('span');
     chip.className = `chip worktree ${wt.locked ? 'locked' : 'unlocked'}`;
     chip.style.setProperty('--chip', color);
     chip.append(worktreeBadge(wt), wt.branch ?? basename(wt.path));
     chip.title = `Worktree: ${wt.path}${wt.detached ? ' (detached)' : ''}${wt.locked ? `\n🔒 Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : ''}\nClick for actions`;
     chip.dataset.worktree = wt.path;
+    chip.dataset.vscodeContext = worktreeContext(wt);
     out.push(chip);
   }
   return out;
+}
+
+function worktreeContext(wt: Worktree): string {
+  return JSON.stringify({ webviewSection: 'worktree', path: wt.path, locked: wt.locked, isMain: wt.isMain, preventDefaultContextMenuItems: true });
 }
 
 function worktreeBadge(wt: Worktree): HTMLElement {
   const b = document.createElement('span');
   b.className = 'wt-badge';
   b.dataset.worktree = wt.path;
+  b.dataset.vscodeContext = worktreeContext(wt);
   b.innerHTML = `<span class="codicon codicon-${wt.isMain ? 'root-folder' : 'folder'}"></span>${wt.locked ? '<span class="codicon codicon-lock lock"></span>' : ''}`;
   return b;
 }
@@ -198,7 +282,7 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
   const dpr = window.devicePixelRatio || 1;
   const rowH = config.rowHeight;
   const laneW = config.laneWidth;
-  const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--graph-w')) || 60;
+  const width = graphVisibleWidth();
   if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
@@ -211,37 +295,50 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
   g.clearRect(0, 0, width, height);
   g.lineWidth = 2;
   g.lineCap = 'round';
-  const x = (lane: number) => 8 + lane * laneW + laneW / 2;
+  const x = (lane: number) => PAD + lane * laneW + laneW / 2 - graphX;
   const y = (r: number) => r * rowH + rowH / 2 - top;
   const colorOf = (c: number) => config.colors[c % config.colors.length] ?? '#888';
-
-  // Edges, batched per color to reduce state changes.
-  const byColor = new Map<number, Path2D>();
-  const pathFor = (c: number) => { let p = byColor.get(c); if (!p) { p = new Path2D(); byColor.set(c, p); } return p; };
   const n = view.length;
   const rFirst = Math.max(0, first);
   const rLast = Math.min(n - 1, last + 1);
+  const hasUncommitted = commits[0]?.hash === UNCOMMITTED;
+
+  const byColor = new Map<number, Path2D>();
+  const pathFor = (c: number) => { let p = byColor.get(c); if (!p) { p = new Path2D(); byColor.set(c, p); } return p; };
+  const dashed = new Map<number, Path2D>();
+  const dashedFor = (c: number) => { let p = dashed.get(c); if (!p) { p = new Path2D(); dashed.set(c, p); } return p; };
   for (let r = rFirst; r <= rLast; r++) {
     const row = rows[r]!;
     const y0 = y(r - 1), y1 = y(r);
-    for (const e of row.edges) addEdge(pathFor(e.color), x(e.from), y0, x(e.to), y1);
+    for (const e of row.edges) {
+      // The strand leaving the uncommitted row is dashed until it reaches HEAD.
+      const fromUncommitted = hasUncommitted && e.from === rows[0]!.lane && r <= (indexByHash.get(headHash ?? '') ?? -1) && e.color === rows[0]!.color;
+      addEdge(fromUncommitted ? dashedFor(e.color) : pathFor(e.color), x(e.from), y0, x(e.to), y1);
+    }
   }
   if (hasMore && last >= n - 2 && n > 0) {
-    // Tail: open strands continuing below the last loaded row.
     const y0 = y(n - 1), y1 = y0 + rowH * 0.6;
     for (const e of tail) addEdge(pathFor(e.color), x(e.from), y0, x(e.to), y1);
   }
   for (const [c, p] of byColor) { g.strokeStyle = colorOf(c); g.stroke(p); }
+  if (dashed.size) {
+    g.setLineDash([3, 3]);
+    for (const [c, p] of dashed) { g.strokeStyle = colorOf(c); g.stroke(p); }
+    g.setLineDash([]);
+  }
 
-  // Nodes
   const bg = getComputedStyle(document.body).getPropertyValue('--vscode-editor-background') || '#1e1e1e';
   for (let r = rFirst; r <= Math.min(n - 1, last); r++) {
-    const row = rows[r]!;
-    const c = commits[r]!;
+    const row = rows[view[r]!]!;
+    const c = commits[view[r]!]!;
     const cx = x(row.lane), cy = y(r);
+    if (cx < -8 || cx > width + 8) continue;
     const col = colorOf(row.color);
     g.beginPath();
-    if (c.hash === headHash) {
+    if (c.hash === UNCOMMITTED) {
+      g.arc(cx, cy, 4, 0, Math.PI * 2);
+      g.setLineDash([2, 2]); g.strokeStyle = col; g.lineWidth = 1.5; g.stroke(); g.setLineDash([]); g.lineWidth = 2;
+    } else if (c.hash === headHash) {
       g.arc(cx, cy, 5.5, 0, Math.PI * 2);
       g.fillStyle = col; g.fill();
       g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fillStyle = bg; g.fill();
@@ -257,6 +354,14 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
       g.beginPath(); g.arc(cx, cy, 8, 0, Math.PI * 2);
       g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.5; g.stroke(); g.globalAlpha = 1; g.lineWidth = 2;
     }
+  }
+  // Fade hint when more lanes are hidden to the right.
+  if (graphFullWidth() - graphX > width + 1) {
+    const grad = g.createLinearGradient(width - 14, 0, width, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, bg);
+    g.fillStyle = grad;
+    g.fillRect(width - 14, 0, 14, height);
   }
 }
 
@@ -290,38 +395,52 @@ function showDetail(d: CommitDetail): void {
   const i = indexByHash.get(d.hash);
   const c = i !== undefined ? commits[i] : undefined;
   detailEl.hidden = false;
-  $('detail-hash').textContent = d.hash;
   const meta = $('detail-meta');
   meta.replaceChildren();
-  if (c) {
-    meta.append(`${c.author} <${c.email}> · ${new Date(c.date * 1000).toLocaleString()}`);
-    if (d.committer && d.committer !== c.author) meta.append(` · committed by ${d.committer}`);
-    if (c.parents.length) {
-      meta.append(' · parents: ');
-      c.parents.forEach((p, k) => {
-        const a = document.createElement('a'); a.href = '#'; a.className = 'mono'; a.textContent = p.slice(0, 8);
-        a.onclick = (e) => { e.preventDefault(); revealHash(p); };
-        if (k) meta.append(', ');
-        meta.append(a);
-      });
+  if (d.hash === UNCOMMITTED) {
+    $('detail-hash').textContent = 'Uncommitted changes';
+    meta.append('Working tree and index, relative to HEAD. Click a file to see its diff.');
+  } else {
+    $('detail-hash').textContent = d.hash;
+    if (c) {
+      meta.append(`${c.author} <${c.email}> · ${new Date(c.date * 1000).toLocaleString()}`);
+      if (d.committer && d.committer !== c.author) meta.append(` · committed by ${d.committer}`);
+      if (c.parents.length) {
+        meta.append(' · parents: ');
+        c.parents.forEach((p, k) => {
+          const a = document.createElement('a'); a.href = '#'; a.className = 'mono'; a.textContent = p.slice(0, 8);
+          a.onclick = (e) => { e.preventDefault(); revealHash(p); };
+          if (k) meta.append(', ');
+          meta.append(a);
+        });
+      }
     }
   }
   $('detail-body').textContent = d.body;
+  $('detail-body').hidden = !d.body;
+  renderFiles(d.hash, d.files);
+}
+
+function renderFiles(hash: string, list: CommitFile[]): void {
   const files = $('detail-files');
   files.replaceChildren();
-  for (const f of d.files) {
-    const line = document.createElement('div');
-    line.className = `file status-${f.status}`;
-    line.innerHTML = `<span class="status">${f.status}</span>`;
-    line.append(f.oldPath ? `${f.oldPath} → ${f.path}` : f.path);
-    line.title = 'Open diff';
-    line.onclick = () => post({ type: 'openFile', hash: d.hash, path: f.path, status: f.status, oldPath: f.oldPath });
-    files.append(line);
-  }
   const summary = document.createElement('div');
   summary.className = 'files-summary';
-  summary.textContent = `${d.files.length} file${d.files.length === 1 ? '' : 's'} changed`;
-  files.prepend(summary);
+  summary.textContent = `${list.length} file${list.length === 1 ? '' : 's'} changed`;
+  files.append(summary);
+  for (const f of list) {
+    const line = document.createElement('div');
+    line.className = `file status-${f.status}`;
+    line.innerHTML = `<span class="status" title="${statusName(f.status)}">${f.status === '?' ? 'U' : f.status}</span>`;
+    line.append(f.oldPath ? `${f.oldPath} → ${f.path}` : f.path);
+    line.title = 'Open diff';
+    line.onclick = () => post({ type: 'openFile', hash, path: f.path, status: f.status, oldPath: f.oldPath });
+    files.append(line);
+  }
+}
+
+function statusName(s: string): string {
+  return { A: 'Added', M: 'Modified', D: 'Deleted', R: 'Renamed', C: 'Copied', T: 'Type changed', U: 'Unmerged', '?': 'Untracked' }[s] ?? s;
 }
 
 function revealHash(hash: string): void {
@@ -373,17 +492,33 @@ function rebuildIndexes(): void {
 // ---------- events ----------
 scroller.addEventListener('scroll', scheduleRender, { passive: true });
 new ResizeObserver(scheduleRender).observe(scroller);
+hscroll.addEventListener('scroll', () => { graphX = hscroll.scrollLeft; scheduleRender(); }, { passive: true });
+scroller.addEventListener('wheel', (e) => {
+  // Shift+wheel (or a horizontal wheel) over the graph column pans the lanes.
+  if (hscroll.hidden) return;
+  const overGraph = e.clientX < scroller.getBoundingClientRect().left + graphVisibleWidth();
+  const dx = e.deltaX !== 0 ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+  if (!overGraph || dx === 0) return;
+  e.preventDefault();
+  hscroll.scrollLeft += dx;
+}, { passive: false });
 rowsEl.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   const wtEl = t.closest<HTMLElement>('[data-worktree]');
   if (wtEl?.dataset.worktree) { e.stopPropagation(); post({ type: 'worktreeMenu', path: wtEl.dataset.worktree }); return; }
-  if (t.closest('.c-hash')) { const row = t.closest<HTMLElement>('.row'); if (row?.dataset.hash) post({ type: 'copy', text: row.dataset.hash }); return; }
+  if (t.closest('.c-hash')) { const row = t.closest<HTMLElement>('.row'); if (row?.dataset.hash && row.dataset.hash !== UNCOMMITTED) post({ type: 'copy', text: row.dataset.hash }); return; }
   const row = t.closest<HTMLElement>('.row');
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash);
 });
+rowsEl.addEventListener('contextmenu', (e) => {
+  // Select the row under the cursor so the detail pane matches the menu target.
+  const row = (e.target as HTMLElement).closest<HTMLElement>('.row');
+  if (row?.dataset.hash && row.dataset.hash !== selected) select(row.dataset.hash);
+});
 $('detail-close').onclick = () => select(null);
-$('detail-hash').onclick = () => { if (selected) post({ type: 'copy', text: selected }); };
+$('detail-hash').onclick = () => { if (selected && selected !== UNCOMMITTED) post({ type: 'copy', text: selected }); };
 $('refresh').onclick = () => post({ type: 'refresh' });
+$('fetch').onclick = () => post({ type: 'fetch' });
 repoSel.onchange = () => post({ type: 'selectRepo', repo: repoSel.value });
 let filterTimer = 0;
 filterEl.oninput = () => { clearTimeout(filterTimer); filterTimer = window.setTimeout(() => { filterText = filterEl.value; rebuildView(); }, 80); };
@@ -396,6 +531,25 @@ scroller.addEventListener('keydown', (e) => {
   const i = view[next];
   if (i !== undefined) select(commits[i]!.hash, true);
 });
+
+// Column resizing: drag the handle on the Author / Date headers.
+for (const handle of document.querySelectorAll<HTMLElement>('.resize')) {
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const key = handle.dataset.col as 'colAuthor' | 'colDate';
+    const startX = e.clientX;
+    const startW = persisted[key] ?? (key === 'colAuthor' ? 170 : 130);
+    handle.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      persisted[key] = Math.max(60, Math.min(500, startW + ev.clientX - startX));
+      applyCss();
+    };
+    const up = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); persist(); scheduleRender(); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+}
+
 window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
   const m = e.data;
   switch (m.type) {
@@ -409,9 +563,14 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       repoSel.value = m.current;
       repoSel.hidden = m.repos.length < 2;
       break;
-    case 'commits':
+    case 'commits': {
+      const repoChanged = currentRepo !== m.repo;
+      currentRepo = m.repo;
       if (m.append) { commits.push(...m.commits); rows.push(...m.rows); }
-      else { commits = m.commits; rows = m.rows; scroller.scrollTop = 0; }
+      else {
+        commits = m.commits; rows = m.rows;
+        if (repoChanged) { scroller.scrollTop = 0; selected = null; detailEl.hidden = true; }
+      }
       tail = m.tail;
       hasMore = m.hasMore;
       maxLanes = m.maxLanes;
@@ -424,11 +583,28 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
         else pendingReveal = null;
       } else if (selected && !indexByHash.has(selected)) {
         select(null);
+      } else if (selected && !m.append) {
+        post({ type: 'select', hash: selected }); // refresh the detail pane after a reload
       }
       break;
+    }
+    case 'status': {
+      // Only the file list of the uncommitted row changed; patch it in place.
+      const first = commits[0];
+      if (first?.hash === UNCOMMITTED) {
+        first.subject = `Uncommitted changes (${m.files.length} file${m.files.length === 1 ? '' : 's'})`;
+        render();
+        if (selected === UNCOMMITTED) renderFiles(UNCOMMITTED, m.files);
+      }
+      break;
+    }
     case 'worktrees':
       worktrees = m.worktrees;
       rebuildIndexes();
+      render();
+      break;
+    case 'avatars':
+      for (const [k, v] of Object.entries(m.avatars)) avatars.set(k, v);
       render();
       break;
     case 'detail':
@@ -446,8 +622,8 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       const el = $('error');
       el.textContent = m.message;
       el.hidden = false;
-      clearTimeout((el as any)._t);
-      (el as any)._t = setTimeout(() => { el.hidden = true; }, 6000);
+      clearTimeout((el as unknown as { _t?: number })._t);
+      (el as unknown as { _t?: number })._t = window.setTimeout(() => { el.hidden = true; }, 6000);
       break;
     }
   }

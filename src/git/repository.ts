@@ -2,21 +2,29 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { git } from './exec';
-import { LOG_FORMAT, parseLog, parseNameStatusZ } from './parse';
+import { LOG_FORMAT, parseLog, parseNameStatusZ, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
-import type { Commit, CommitDetail, Worktree } from '../shared/types';
+import type { Commit, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
 
 export interface LogOptions {
   skip: number;
   maxCount: number;
   remotes: boolean;
   tags: boolean;
+  /** Extra revisions to include (e.g. stash commits). */
+  extraRevs?: string[];
 }
 
 /** A git working tree (main or linked) that the UI can show a graph for. */
 export class Repository implements vscode.Disposable {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /** Refs, HEAD, or worktree metadata changed. */
   readonly onDidChange = this._onDidChange.event;
+  private readonly _onDidChangeWorkingTree = new vscode.EventEmitter<void>();
+  /** Files in the working tree or the index changed. */
+  readonly onDidChangeWorkingTree = this._onDidChangeWorkingTree.event;
+  private wtWatcher: vscode.FileSystemWatcher | undefined;
+  private wtDebounce: NodeJS.Timeout | undefined;
   private watcher: fs.FSWatcher | undefined;
   private debounce: NodeJS.Timeout | undefined;
   private remoteNames: string[] | undefined;
@@ -58,7 +66,7 @@ export class Repository implements vscode.Disposable {
     ];
     if (!opts.remotes) args.push('--exclude=refs/remotes/*');
     if (!opts.tags) args.push('--exclude=refs/tags/*');
-    args.push('--all');
+    args.push('--all', ...(opts.extraRevs ?? []));
     const { stdout } = await git(this.root, args, { token });
     const commits = parseLog(stdout, remotes);
     const hasMore = commits.length > opts.maxCount;
@@ -127,13 +135,87 @@ export class Repository implements vscode.Disposable {
     return stdout.split('\n').map((s) => s.trim()).filter(Boolean);
   }
 
+  // ---------- working tree / stashes ----------
+
+  async headHash(): Promise<string | undefined> {
+    try {
+      const { stdout } = await git(this.root, ['rev-parse', '--verify', '-q', 'HEAD']);
+      return stdout.trim() || undefined;
+    } catch {
+      return undefined; // unborn branch
+    }
+  }
+
+  async currentBranch(): Promise<string | undefined> {
+    const { stdout } = await git(this.root, ['symbolic-ref', '-q', '--short', 'HEAD']).catch(() => ({ stdout: '' }));
+    return stdout.trim() || undefined;
+  }
+
+  /** Changed files in the working tree and index (`git status --porcelain -z`). */
+  async status(): Promise<CommitFile[]> {
+    const { stdout } = await git(this.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+    return parseStatusZ(stdout);
+  }
+
+  async stashes(): Promise<Stash[]> {
+    const { stdout } = await git(this.root, ['stash', 'list', '--format=%H%x1f%gd%x1f%P%x1f%gs']).catch(() => ({ stdout: '' }));
+    const out: Stash[] = [];
+    for (const line of stdout.split('\n')) {
+      if (!line) continue;
+      const [hash, ref, parents, subject] = line.split('\x1f');
+      if (!hash || !ref) continue;
+      const m = /^stash@\{(\d+)\}$/.exec(ref);
+      out.push({ hash, index: m ? Number(m[1]) : out.length, parents: (parents ?? '').split(' ').filter(Boolean), message: subject ?? '' });
+    }
+    return out;
+  }
+
+  stashApply(index: number): Promise<unknown> { return git(this.root, ['stash', 'apply', `stash@{${index}}`]); }
+  stashPop(index: number): Promise<unknown> { return git(this.root, ['stash', 'pop', `stash@{${index}}`]); }
+  stashDrop(index: number): Promise<unknown> { return git(this.root, ['stash', 'drop', `stash@{${index}}`]); }
+
+  // ---------- refs / history actions ----------
+
+  checkout(ref: string): Promise<unknown> { return git(this.root, ['checkout', ref]); }
+  checkoutTracking(remoteBranch: string): Promise<unknown> { return git(this.root, ['checkout', '--track', remoteBranch]); }
+  createBranch(name: string, at: string, checkout: boolean): Promise<unknown> {
+    return checkout ? git(this.root, ['checkout', '-b', name, at]) : git(this.root, ['branch', name, at]);
+  }
+  deleteBranch(name: string, force: boolean): Promise<unknown> { return git(this.root, ['branch', force ? '-D' : '-d', name]); }
+  renameBranch(from: string, to: string): Promise<unknown> { return git(this.root, ['branch', '-m', from, to]); }
+  merge(ref: string, mode: 'default' | 'no-ff' | 'squash' | 'ff-only'): Promise<unknown> {
+    const args = ['merge'];
+    if (mode === 'no-ff') args.push('--no-ff');
+    else if (mode === 'squash') args.push('--squash');
+    else if (mode === 'ff-only') args.push('--ff-only');
+    args.push('--no-edit', ref);
+    return git(this.root, args);
+  }
+  rebase(onto: string): Promise<unknown> { return git(this.root, ['rebase', onto]); }
+  cherryPick(hash: string, noCommit: boolean): Promise<unknown> {
+    return git(this.root, noCommit ? ['cherry-pick', '--no-commit', hash] : ['cherry-pick', hash]);
+  }
+  revert(hash: string): Promise<unknown> { return git(this.root, ['revert', '--no-edit', hash]); }
+  reset(hash: string, mode: 'soft' | 'mixed' | 'hard'): Promise<unknown> { return git(this.root, ['reset', `--${mode}`, hash]); }
+  createTag(name: string, at: string, message?: string): Promise<unknown> {
+    return message ? git(this.root, ['tag', '-a', name, '-m', message, at]) : git(this.root, ['tag', name, at]);
+  }
+  deleteTag(name: string): Promise<unknown> { return git(this.root, ['tag', '-d', name]); }
+  fetch(): Promise<unknown> { return git(this.root, ['fetch', '--all', '--prune']); }
+
+  async remoteUrl(name = 'origin'): Promise<string | undefined> {
+    const { stdout } = await git(this.root, ['remote', 'get-url', name]).catch(() => ({ stdout: '' }));
+    return stdout.trim() || undefined;
+  }
+
   /** Watch the shared git dir (refs, HEAD, worktree metadata) and fire a debounced change event. */
   private watch(): void {
     try {
       this.watcher = fs.watch(this.commonDir, { recursive: true }, (_ev, file) => {
         const f = typeof file === 'string' ? file : '';
         // Ignore index churn and our own lock files; refs/HEAD/packed-refs/worktrees are what matter.
-        if (f.endsWith('.lock') || f === 'index' || f.startsWith('objects')) return;
+        if (f.endsWith('.lock') || f.startsWith('objects')) return;
+        if (f === 'index' || f.endsWith('/index')) { this.fireWorkingTree(); return; }
         if (this.debounce) clearTimeout(this.debounce);
         this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
       });
@@ -148,11 +230,27 @@ export class Repository implements vscode.Disposable {
   }
   private fallback: vscode.Disposable | undefined;
 
+  private fireWorkingTree(): void {
+    if (this.wtDebounce) clearTimeout(this.wtDebounce);
+    this.wtDebounce = setTimeout(() => this._onDidChangeWorkingTree.fire(), 500);
+  }
+
+  /** Start watching the working tree (VS Code's watcher honours files.watcherExclude). Idempotent. */
+  watchWorkingTree(): void {
+    if (this.wtWatcher) return;
+    this.wtWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.root, '**/*'));
+    const onFs = (u: vscode.Uri) => { if (!u.fsPath.includes(`${path.sep}.git${path.sep}`)) this.fireWorkingTree(); };
+    this.wtWatcher.onDidChange(onFs); this.wtWatcher.onDidCreate(onFs); this.wtWatcher.onDidDelete(onFs);
+  }
+
   dispose(): void {
     this.watcher?.close();
     this.fallback?.dispose();
+    this.wtWatcher?.dispose();
     if (this.debounce) clearTimeout(this.debounce);
+    if (this.wtDebounce) clearTimeout(this.wtDebounce);
     this._onDidChange.dispose();
+    this._onDidChangeWorkingTree.dispose();
   }
 }
 

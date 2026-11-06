@@ -1,11 +1,15 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import type { AvatarService } from './avatars';
 import { GitFileProvider } from './fileProvider';
 import type { Repository } from './git/repository';
+import { foldStashes } from './git/parse';
 import { shortBranch } from './git/worktree-parse';
 import { GraphLayout } from './graph/layout';
-import type { GraphConfig, HostMessage, WebviewMessage, Worktree } from './shared/types';
+import { UNCOMMITTED, type Commit, type CommitFile, type GraphConfig, type HostMessage, type Stash, type WebviewMessage, type Worktree } from './shared/types';
 import type { WorktreeActions } from './worktreeCommands';
+
+export const VIEW_TYPE = 'gitwave.graph';
 
 export class GraphPanel implements vscode.Disposable {
   static current: GraphPanel | undefined;
@@ -20,21 +24,26 @@ export class GraphPanel implements vscode.Disposable {
   private generation = 0;
   private cts: vscode.CancellationTokenSource | undefined;
   private worktrees: Worktree[] = [];
-  private repoSub: vscode.Disposable | undefined;
+  private stashes: Stash[] = [];
+  private statusFiles: CommitFile[] = [];
+  private repoSubs: vscode.Disposable[] = [];
 
-  static show(ctx: vscode.ExtensionContext, repos: Repository[], actions: WorktreeActions, preferred?: Repository): GraphPanel {
+  static show(ctx: vscode.ExtensionContext, repos: Repository[], actions: WorktreeActions, avatars: AvatarService, preferred?: Repository): GraphPanel {
     if (GraphPanel.current) {
       GraphPanel.current.panel.reveal();
       GraphPanel.current.setRepositories(repos, preferred);
       return GraphPanel.current;
     }
-    const panel = vscode.window.createWebviewPanel('gitwave.graph', 'Git Graph', vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Git Wave', vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, 'dist'), vscode.Uri.joinPath(ctx.extensionUri, 'media')],
     });
-    panel.iconPath = new vscode.ThemeIcon('git-branch');
-    GraphPanel.current = new GraphPanel(ctx, panel, repos, actions, preferred);
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(ctx.extensionUri, 'media', 'tab-light.svg'),
+      dark: vscode.Uri.joinPath(ctx.extensionUri, 'media', 'tab-dark.svg'),
+    };
+    GraphPanel.current = new GraphPanel(ctx, panel, repos, actions, avatars, preferred);
     return GraphPanel.current;
   }
 
@@ -43,6 +52,7 @@ export class GraphPanel implements vscode.Disposable {
     panel: vscode.WebviewPanel,
     private repos: Repository[],
     private readonly actions: WorktreeActions,
+    private readonly avatars: AvatarService,
     preferred?: Repository,
   ) {
     this.panel = panel;
@@ -55,6 +65,11 @@ export class GraphPanel implements vscode.Disposable {
     this.setRepositories(repos, preferred);
   }
 
+  /** The repository currently shown. */
+  get repository(): Repository | undefined {
+    return this.repo;
+  }
+
   setRepositories(repos: Repository[], preferred?: Repository): void {
     this.repos = repos;
     const next = preferred ?? (this.repo && repos.includes(this.repo) ? this.repo : repos[0]);
@@ -63,9 +78,13 @@ export class GraphPanel implements vscode.Disposable {
   }
 
   private switchRepo(repo: Repository): void {
-    this.repoSub?.dispose();
+    for (const s of this.repoSubs) s.dispose();
     this.repo = repo;
-    this.repoSub = repo.onDidChange(() => void this.reload());
+    repo.watchWorkingTree();
+    this.repoSubs = [
+      repo.onDidChange(() => void this.reload()),
+      repo.onDidChangeWorkingTree(() => void this.refreshStatus()),
+    ];
     void this.reload();
   }
 
@@ -89,6 +108,12 @@ export class GraphPanel implements vscode.Disposable {
       case 'refresh':
         await this.reload();
         return;
+      case 'fetch':
+        if (!repo) return;
+        this.post({ type: 'loading', loading: true });
+        try { await repo.fetch(); } catch (e) { this.post({ type: 'error', message: (e as Error).message }); }
+        await this.reload();
+        return;
       case 'loadMore':
         await this.loadPage(false);
         return;
@@ -99,6 +124,10 @@ export class GraphPanel implements vscode.Disposable {
       }
       case 'select':
         if (!repo) return;
+        if (m.hash === UNCOMMITTED) {
+          this.post({ type: 'detail', detail: { hash: UNCOMMITTED, body: '', committer: '', committerDate: 0, files: this.statusFiles } });
+          return;
+        }
         try { this.post({ type: 'detail', detail: await repo.detail(m.hash) }); } catch (e) { this.post({ type: 'error', message: (e as Error).message }); }
         return;
       case 'openFile':
@@ -121,17 +150,19 @@ export class GraphPanel implements vscode.Disposable {
   }
 
   private async openDiff(repo: Repository, hash: string, rel: string, status: string, oldPath?: string): Promise<void> {
+    const working = vscode.Uri.file(path.join(repo.root, rel));
+    if (hash === UNCOMMITTED) {
+      if (status === '?' || status === 'A') { await vscode.commands.executeCommand('vscode.open', working, { preview: true }); return; }
+      const head = GitFileProvider.uri(repo.root, 'HEAD', oldPath ?? rel);
+      if (status === 'D') { await vscode.commands.executeCommand('vscode.open', head, { preview: true }); return; }
+      await vscode.commands.executeCommand('vscode.diff', head, working, `${path.basename(rel)} (Working Tree)`, { preview: true });
+      return;
+    }
     const title = `${path.basename(rel)} (${hash.slice(0, 7)})`;
     const right = GitFileProvider.uri(repo.root, hash, rel);
-    if (status === 'A') {
-      await vscode.commands.executeCommand('vscode.open', right, { preview: true });
-      return;
-    }
+    if (status === 'A') { await vscode.commands.executeCommand('vscode.open', right, { preview: true }); return; }
     const left = GitFileProvider.uri(repo.root, `${hash}^`, oldPath ?? rel);
-    if (status === 'D') {
-      await vscode.commands.executeCommand('vscode.open', left, { preview: true });
-      return;
-    }
+    if (status === 'D') { await vscode.commands.executeCommand('vscode.open', left, { preview: true }); return; }
     await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
   }
 
@@ -141,6 +172,20 @@ export class GraphPanel implements vscode.Disposable {
     this.loaded = 0;
     this.hasMore = false;
     await Promise.all([this.loadPage(true), this.loadWorktrees()]);
+  }
+
+  /** Re-check the working tree; reload the graph only if the uncommitted row would change. */
+  private async refreshStatus(): Promise<void> {
+    if (!this.repo) return;
+    try {
+      const files = await this.repo.status();
+      const before = this.statusFiles;
+      const changed = files.length !== before.length || files.some((f, i) => f.path !== before[i]?.path || f.status !== before[i]?.status);
+      if (!changed) return;
+      if ((files.length === 0) !== (before.length === 0)) { await this.reload(); return; }
+      this.statusFiles = files;
+      this.post({ type: 'status', files });
+    } catch { /* ignore transient errors */ }
   }
 
   private async loadWorktrees(): Promise<void> {
@@ -164,22 +209,60 @@ export class GraphPanel implements vscode.Disposable {
     this.loading = true;
     this.post({ type: 'loading', loading: true });
     try {
-      const { commits, hasMore } = await repo.log({
+      if (first) {
+        [this.stashes, this.statusFiles] = await Promise.all([repo.stashes(), repo.status()]);
+      }
+      const { commits: raw, hasMore } = await repo.log({
         skip: this.loaded,
         maxCount: cfg.get<number>('commitsPerPage', 500),
         remotes: cfg.get<boolean>('showRemoteBranches', true),
         tags: cfg.get<boolean>('showTags', true),
+        extraRevs: this.stashes.map((s) => s.hash),
       }, cts.token);
       if (gen !== this.generation) return;
+      const commits = this.decorate(foldStashes(raw, this.stashes));
+      if (first && this.statusFiles.length > 0) {
+        const head = await repo.headHash();
+        if (gen !== this.generation) return;
+        commits.unshift(this.uncommittedRow(head));
+      }
       const rows = commits.map((c) => this.layout.add(c));
-      this.loaded += commits.length;
+      this.loaded += raw.length;
       this.hasMore = hasMore;
       this.post({ type: 'commits', repo: repo.root, commits, rows, tail: hasMore ? this.layout.tail() : [], append: !first, hasMore, maxLanes: this.layout.maxLanes });
+      if (readConfig().avatars) {
+        const known = this.avatars.resolve(commits, await repo.remoteUrl(), (more) => { if (gen === this.generation) this.post({ type: 'avatars', avatars: more }); });
+        this.post({ type: 'avatars', avatars: known });
+      }
     } catch (e) {
       if (gen === this.generation && !cts.token.isCancellationRequested) this.post({ type: 'error', message: (e as Error).message });
     } finally {
       if (gen === this.generation) { this.loading = false; this.post({ type: 'loading', loading: false }); }
     }
+  }
+
+  /** Attach stash refs to their commits. */
+  private decorate(commits: Commit[]): Commit[] {
+    if (this.stashes.length === 0) return commits;
+    const byHash = new Map(this.stashes.map((s) => [s.hash, s]));
+    for (const c of commits) {
+      const s = byHash.get(c.hash);
+      if (s) c.refs = [{ kind: 'stash', name: `stash@{${s.index}}` }, ...c.refs];
+    }
+    return commits;
+  }
+
+  private uncommittedRow(head: string | undefined): Commit {
+    const n = this.statusFiles.length;
+    return {
+      hash: UNCOMMITTED,
+      parents: head ? [head] : [],
+      author: '',
+      email: '',
+      date: Math.floor(Date.now() / 1000),
+      subject: `Uncommitted changes (${n} file${n === 1 ? '' : 's'})`,
+      refs: [],
+    };
   }
 
   private html(): string {
@@ -192,11 +275,11 @@ export class GraphPanel implements vscode.Disposable {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${w.cspSource} 'unsafe-inline'; font-src ${w.cspSource}; script-src 'nonce-${nonce}'; img-src ${w.cspSource} data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${w.cspSource} 'unsafe-inline'; font-src ${w.cspSource}; script-src 'nonce-${nonce}'; img-src ${w.cspSource} https: data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="${codicons}">
 <link rel="stylesheet" href="${style}">
-<title>Git Graph</title>
+<title>Git Wave</title>
 </head>
 <body>
 <div id="app"></div>
@@ -208,7 +291,7 @@ export class GraphPanel implements vscode.Disposable {
   dispose(): void {
     GraphPanel.current = undefined;
     this.cts?.cancel();
-    this.repoSub?.dispose();
+    for (const s of this.repoSubs) s.dispose();
     this.panel.dispose();
     for (const d of this.disposables) d.dispose();
   }
@@ -221,5 +304,7 @@ export function readConfig(): GraphConfig {
     rowHeight: c.get<number>('graph.rowHeight', 24),
     colors: c.get<string[]>('graph.colors', []),
     dateFormat: c.get<'relative' | 'absolute' | 'iso'>('dateFormat', 'relative'),
+    avatars: c.get<boolean>('avatars', true),
+    visibleLanes: c.get<number>('graph.visibleLanes', 12),
   };
 }

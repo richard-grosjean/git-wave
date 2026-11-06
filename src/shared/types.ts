@@ -1,7 +1,10 @@
 // Types shared between the extension host and the webview. Keep this file free of
 // imports from either side so it can be bundled into both.
 
-export type RefKind = 'head' | 'branch' | 'remote' | 'tag';
+export type RefKind = 'head' | 'branch' | 'remote' | 'tag' | 'stash';
+
+/** Pseudo-hash of the synthetic "uncommitted changes" row. */
+export const UNCOMMITTED = '*';
 
 export interface Ref {
   kind: RefKind;
@@ -36,6 +39,13 @@ export interface Row {
   edges: Edge[];
 }
 
+export interface Stash {
+  hash: string;
+  index: number;
+  parents: string[];
+  message: string;
+}
+
 export interface Worktree {
   path: string;
   head: string;
@@ -68,6 +78,9 @@ export interface GraphConfig {
   rowHeight: number;
   colors: string[];
   dateFormat: 'relative' | 'absolute' | 'iso';
+  avatars: boolean;
+  /** Max lanes visible before the graph column scrolls horizontally. */
+  visibleLanes: number;
 }
 
 // ---- Messages: host -> webview ----
@@ -77,6 +90,8 @@ export type HostMessage =
   | { type: 'commits'; repo: string; commits: Commit[]; rows: Row[]; tail: Edge[]; append: boolean; hasMore: boolean; maxLanes: number }
   | { type: 'worktrees'; worktrees: Worktree[] }
   | { type: 'detail'; detail: CommitDetail }
+  | { type: 'avatars'; avatars: Record<string, string> }
+  | { type: 'status'; files: CommitFile[] }
   | { type: 'loading'; loading: boolean }
   | { type: 'reveal'; hash: string }
   | { type: 'error'; message: string };
@@ -87,6 +102,7 @@ export type WorktreeAction = 'open' | 'openNewWindow' | 'lock' | 'unlock' | 'rem
 export type WebviewMessage =
   | { type: 'ready' }
   | { type: 'refresh' }
+  | { type: 'fetch' }
   | { type: 'loadMore' }
   | { type: 'selectRepo'; repo: string }
   | { type: 'select'; hash: string }

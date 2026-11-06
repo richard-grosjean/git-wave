@@ -50,3 +50,24 @@ test('parseWorktreeList reads porcelain output', () => {
   assert.equal(out[2]!.lockReason, undefined);
   assert.match(out[2]!.prunable!, /non-existent/);
 });
+
+test('parseStatusZ reads porcelain v1 with renames and untracked', async () => {
+  const { parseStatusZ } = await import('../src/git/parse.js');
+  const files = parseStatusZ(' M src/a.ts\0M  src/b.ts\0R  new.ts\0old.ts\0?? junk.txt\0D  gone.ts\0');
+  assert.deepEqual(files, [
+    { status: 'M', path: 'src/a.ts' },
+    { status: 'M', path: 'src/b.ts' },
+    { status: 'R', path: 'new.ts', oldPath: 'old.ts' },
+    { status: '?', path: 'junk.txt' },
+    { status: 'D', path: 'gone.ts' },
+  ]);
+});
+
+test('foldStashes drops helper commits and trims stash parents', async () => {
+  const { foldStashes } = await import('../src/git/parse.js');
+  const mk = (hash: string, parents: string[]) => ({ hash, parents, author: '', email: '', date: 0, subject: hash, refs: [] });
+  const commits = [mk('stash', ['base', 'index', 'untracked']), mk('index', ['base']), mk('untracked', []), mk('base', [])];
+  const out = foldStashes(commits, [{ hash: 'stash', parents: ['base', 'index', 'untracked'] }]);
+  assert.deepEqual(out.map((c) => c.hash), ['stash', 'base']);
+  assert.deepEqual(out[0]!.parents, ['base']);
+});

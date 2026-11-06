@@ -85,3 +85,52 @@ export function parseNameStatusZ(stdout: string): NameStatusEntry[] {
   }
   return out;
 }
+
+/**
+ * Parses `git status --porcelain=v1 -z`. Entries are `XY path\0` and renames add `\0origpath`.
+ * Status letter preference: index status, else worktree status; untracked is `?`.
+ */
+export function parseStatusZ(stdout: string): NameStatusEntry[] {
+  const parts = stdout.split('\0');
+  const out: NameStatusEntry[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const rec = parts[i]!;
+    if (rec.length < 4) { i++; continue; }
+    const x = rec[0]!, y = rec[1]!;
+    const path = rec.slice(3);
+    let status = x !== ' ' && x !== '?' ? x : y;
+    if (x === '?' ) status = '?';
+    if (x === 'R' || x === 'C') {
+      const oldPath = parts[i + 1] ?? '';
+      out.push({ status: x, path, oldPath });
+      i += 2;
+    } else {
+      out.push({ status, path });
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Stash commits carry extra parents (index state, untracked files) that only exist to hold the
+ * stash. Fold them away: drop those helper commits from the list and trim the stash's parents to
+ * the base commit, so the stash draws as a single node hanging off its base.
+ */
+export function foldStashes(commits: Commit[], stashes: { hash: string; parents: string[] }[]): Commit[] {
+  if (stashes.length === 0) return commits;
+  const helpers = new Set<string>();
+  const stashHashes = new Set<string>();
+  for (const s of stashes) {
+    stashHashes.add(s.hash);
+    for (const p of s.parents.slice(1)) helpers.add(p);
+  }
+  const out: Commit[] = [];
+  for (const c of commits) {
+    if (helpers.has(c.hash)) continue;
+    if (stashHashes.has(c.hash)) out.push({ ...c, parents: c.parents.slice(0, 1) });
+    else out.push(c);
+  }
+  return out;
+}

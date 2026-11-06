@@ -17,7 +17,7 @@ export class WorktreeItem extends vscode.TreeItem {
     );
     this.resourceUri = vscode.Uri.file(wt.path);
     this.tooltip = tooltipFor(wt);
-    this.command = { command: 'gitwave.worktree.revealInGraph', title: 'Reveal in Git Graph', arguments: [this] };
+    this.command = { command: 'gitwave.worktree.revealInGraph', title: 'Reveal in Git Wave', arguments: [this] };
   }
 }
 

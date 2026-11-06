@@ -2,7 +2,7 @@
   "name": "git-wave",
   "displayName": "Git Wave",
   "description": "A fast git graph with worktrees. Lightweight, canvas-drawn history with lock-aware worktree management.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "richard-grosjean",
   "license": "MIT",
   "author": {
@@ -41,7 +41,7 @@
     "commands": [
       {
         "command": "gitwave.open",
-        "title": "View Git Graph",
+        "title": "Open Graph",
         "category": "Git Wave",
         "icon": "$(git-branch)"
       },
@@ -105,7 +105,153 @@
       },
       {
         "command": "gitwave.worktree.revealInGraph",
-        "title": "Reveal in Git Graph",
+        "title": "Reveal in Git Wave",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.fetch",
+        "title": "Fetch All Remotes",
+        "category": "Git Wave",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitwave.commit.checkout",
+        "title": "Checkout Commit (Detached)",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.createBranch",
+        "title": "Create Branch Here…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.createTag",
+        "title": "Create Tag Here…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.cherryPick",
+        "title": "Cherry-pick Commit…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.revert",
+        "title": "Revert Commit…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.merge",
+        "title": "Merge Commit into Current Branch…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.reset",
+        "title": "Reset Current Branch to Here…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.copyHash",
+        "title": "Copy Commit Hash",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.copySubject",
+        "title": "Copy Commit Subject",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.checkout",
+        "title": "Checkout Branch",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.merge",
+        "title": "Merge into Current Branch…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.rebase",
+        "title": "Rebase Current Branch onto This…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.createFrom",
+        "title": "Create Branch from Here…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.rename",
+        "title": "Rename Branch…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.delete",
+        "title": "Delete Branch…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.copyName",
+        "title": "Copy Branch Name",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.tag.checkout",
+        "title": "Checkout Tag (Detached)",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.tag.delete",
+        "title": "Delete Tag…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.tag.copyName",
+        "title": "Copy Tag Name",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.stash.apply",
+        "title": "Apply Stash",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.stash.pop",
+        "title": "Pop Stash",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.stash.drop",
+        "title": "Drop Stash…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.open",
+        "title": "Open Worktree in Current Window",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.openNewWindow",
+        "title": "Open Worktree in New Window",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.lock",
+        "title": "Lock Worktree…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.unlock",
+        "title": "Unlock Worktree",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.remove",
+        "title": "Remove Worktree…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.ctx.worktree.copyPath",
+        "title": "Copy Worktree Path",
         "category": "Git Wave"
       }
     ],
@@ -236,6 +382,295 @@
         {
           "command": "gitwave.worktree.revealInGraph",
           "when": "false"
+        },
+        {
+          "command": "gitwave.commit.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.createBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.createTag",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.cherryPick",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.revert",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.merge",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.reset",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.copyHash",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.copySubject",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.merge",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.rebase",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.createFrom",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.rename",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.delete",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.copyName",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.tag.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.tag.delete",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.tag.copyName",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.stash.apply",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.stash.pop",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.stash.drop",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.open",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.openNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.lock",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.unlock",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.remove",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.ctx.worktree.copyPath",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "gitwave.commit.checkout",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "1_nav@1"
+        },
+        {
+          "command": "gitwave.commit.createBranch",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "1_nav@2"
+        },
+        {
+          "command": "gitwave.commit.createTag",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "1_nav@3"
+        },
+        {
+          "command": "gitwave.commit.merge",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "2_integrate@1"
+        },
+        {
+          "command": "gitwave.commit.cherryPick",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "2_integrate@2"
+        },
+        {
+          "command": "gitwave.commit.revert",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "2_integrate@3"
+        },
+        {
+          "command": "gitwave.commit.reset",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "3_danger@1"
+        },
+        {
+          "command": "gitwave.commit.copyHash",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitwave.commit.copySubject",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "gitwave.branch.checkout",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && !isHead",
+          "group": "1_nav@1"
+        },
+        {
+          "command": "gitwave.branch.merge",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && !isHead",
+          "group": "2_integrate@1"
+        },
+        {
+          "command": "gitwave.branch.rebase",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && !isHead",
+          "group": "2_integrate@2"
+        },
+        {
+          "command": "gitwave.branch.createFrom",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "1_nav@2"
+        },
+        {
+          "command": "gitwave.branch.rename",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "gitwave.branch.delete",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && !isHead",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "gitwave.branch.copyName",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitwave.branch.checkout",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "1_nav@1"
+        },
+        {
+          "command": "gitwave.branch.merge",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "2_integrate@1"
+        },
+        {
+          "command": "gitwave.branch.rebase",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "2_integrate@2"
+        },
+        {
+          "command": "gitwave.branch.createFrom",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "1_nav@2"
+        },
+        {
+          "command": "gitwave.branch.copyName",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitwave.tag.checkout",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "1_nav@1"
+        },
+        {
+          "command": "gitwave.branch.createFrom",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "1_nav@2"
+        },
+        {
+          "command": "gitwave.commit.merge",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "2_integrate@1"
+        },
+        {
+          "command": "gitwave.tag.delete",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "gitwave.tag.copyName",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitwave.stash.apply",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'stash'",
+          "group": "1_stash@1"
+        },
+        {
+          "command": "gitwave.stash.pop",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'stash'",
+          "group": "1_stash@2"
+        },
+        {
+          "command": "gitwave.stash.drop",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'stash'",
+          "group": "3_danger@1"
+        },
+        {
+          "command": "gitwave.ctx.worktree.openNewWindow",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree'",
+          "group": "1_open@1"
+        },
+        {
+          "command": "gitwave.ctx.worktree.open",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree'",
+          "group": "1_open@2"
+        },
+        {
+          "command": "gitwave.ctx.worktree.lock",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && !locked && !isMain",
+          "group": "2_lock@1"
+        },
+        {
+          "command": "gitwave.ctx.worktree.unlock",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && locked",
+          "group": "2_lock@1"
+        },
+        {
+          "command": "gitwave.ctx.worktree.copyPath",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitwave.ctx.worktree.remove",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && !isMain",
+          "group": "4_danger@1"
         }
       ]
     },
@@ -300,6 +735,18 @@
             "#7ee787"
           ],
           "description": "Lane colors, cycled in order."
+        },
+        "gitwave.avatars": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show author avatars (GitHub via the gh CLI token when available, otherwise Gravatar)."
+        },
+        "gitwave.graph.visibleLanes": {
+          "type": "number",
+          "default": 12,
+          "minimum": 3,
+          "maximum": 64,
+          "description": "Lanes visible in the graph column before it scrolls horizontally."
         }
       }
     }

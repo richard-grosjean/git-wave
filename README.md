@@ -10,14 +10,26 @@ A fast git graph with worktrees.
   The same worktrees show up on the graph as badges on their commits.
 - **Lock / unlock / add / remove / prune** worktrees from the sidebar or straight from a badge in
   the graph. Prunable (stale) worktrees are flagged.
+- **Uncommitted changes** row at the top with a dashed strand down to HEAD; select it to see the
+  working-tree files and open their diffs.
+- **Right-click actions** on commits, branches, remote branches, tags, stashes and worktree badges:
+  checkout, create branch, create tag, merge (fast-forward, merge commit, squash, ff-only), rebase,
+  cherry-pick, revert, reset (soft/mixed/hard), rename, delete, apply/pop/drop stash, copy.
+  Native VS Code menus, so they follow your theme and keybindings.
+- **Worktree-aware checkout.** Checking out a branch that lives in another worktree offers to open
+  that worktree instead of failing.
+- **Author avatars** from GitHub (using your `gh` CLI login when available, so no rate-limit
+  trouble) or Gravatar, with initials as a fallback.
+- **Stashes** appear as dashed nodes hanging off their base commit.
 - **Commit details** with changed files; click a file to open its diff. No dependency on the
   built-in Git extension.
-- Instant filter by message, author, hash, or ref name.
-- Auto-refreshes when refs, HEAD, or worktree metadata change.
+- Instant filter by message, author, hash, or ref name. Resizable Author and Date columns.
+- Wide histories scroll horizontally inside the graph column (shift+wheel or the slim scrollbar).
+- Auto-refreshes when refs, HEAD, the working tree, or worktree metadata change.
 
 ## Usage
 
-- Command Palette: **Git Wave: View Git Graph**, or the branch icon in the Source Control title bar.
+- Command Palette: **Git Wave: Open Graph**, or the branch icon in the Source Control title bar.
 - The **Worktrees** view lives in the Source Control sidebar. Hover a worktree for its path,
   HEAD, and lock reason. Inline buttons lock/unlock and open the worktree in a new window.
 - In the graph, click the folder badge on a branch chip (or a dotted worktree chip for a detached
@@ -35,6 +47,8 @@ A fast git graph with worktrees.
 | `gitwave.graph.laneWidth` | `14` | Pixels per lane. |
 | `gitwave.graph.rowHeight` | `24` | Row height in pixels. |
 | `gitwave.graph.colors` | 10 colours | Lane colours, cycled. |
+| `gitwave.graph.visibleLanes` | `12` | Lanes shown before the graph column scrolls horizontally. |
+| `gitwave.avatars` | `true` | Show author avatars. |
 
 ## Development
 
