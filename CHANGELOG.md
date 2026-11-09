@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 (2026-11-09)
 
 - Fix: the graph now updates live again. Repos opened at their root resolved the git common dir to a non-existent `.git/.git`, so the ref/commit/worktree watcher never started and only the manual refresh picked up changes.
 
