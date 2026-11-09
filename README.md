@@ -3,7 +3,7 @@
 A fast git graph with worktrees.
 
 [![CI](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml)
-[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/richard-grosjean.git-wave?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=richard-grosjean.git-wave)
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/rgro.git-wave?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=rgro.git-wave)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![Git Wave showing a branch graph with a locked worktree, a stash, tags and the uncommitted changes row](media/screenshot.png)
@@ -19,7 +19,7 @@ rows on screen, and puts worktrees (including what is locked, and why) right in 
 Search for **Git Wave** in the Extensions view, or:
 
 ```sh
-code --install-extension richard-grosjean.git-wave
+code --install-extension rgro.git-wave
 ```
 
 - **Graph view** in the familiar lanes-and-curves style: branches, tags, remotes, and HEAD on a

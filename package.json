@@ -3,7 +3,7 @@
   "displayName": "Git Wave",
   "description": "A fast git graph with worktrees. Lightweight, canvas-drawn history with lock-aware worktree management.",
   "version": "0.2.0",
-  "publisher": "richard-grosjean",
+  "publisher": "rgro",
   "license": "MIT",
   "author": {
     "name": "Richard Grosjean"
