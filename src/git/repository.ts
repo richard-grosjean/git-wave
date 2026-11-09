@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { git } from './exec';
-import { LOG_FORMAT, parseLog, parseNameStatusZ, parseStatusZ } from './parse';
+import { LOG_FORMAT, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
 import type { Commit, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
 
@@ -36,10 +36,9 @@ export class Repository implements vscode.Disposable {
   static async open(folder: string): Promise<Repository | undefined> {
     try {
       const { stdout } = await git(folder, ['rev-parse', '--show-toplevel', '--absolute-git-dir', '--git-common-dir']);
-      const [root, gitDir, common] = stdout.trim().split('\n');
-      if (!root || !gitDir) return undefined;
-      const commonDir = path.isAbsolute(common ?? '') ? common! : path.resolve(gitDir, common ?? '.');
-      const repo = new Repository(root, gitDir, commonDir);
+      const paths = parseRepoPaths(folder, stdout, path.resolve, path.isAbsolute);
+      if (!paths) return undefined;
+      const repo = new Repository(paths.root, paths.gitDir, paths.commonDir);
       repo.watch();
       return repo;
     } catch {

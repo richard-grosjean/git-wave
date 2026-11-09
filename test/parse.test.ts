@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDecorations, parseLog, parseNameStatusZ, FIELD_SEP, RECORD_SEP } from '../src/git/parse.js';
+import path from 'node:path';
+import { parseDecorations, parseLog, parseNameStatusZ, parseRepoPaths, FIELD_SEP, RECORD_SEP } from '../src/git/parse.js';
 import { parseWorktreeList } from '../src/git/worktree-parse.js';
 
 test('parseDecorations classifies refs', () => {
@@ -71,4 +72,19 @@ test('foldStashes drops helper commits and trims stash parents', async () => {
   const out = foldStashes(commits, [{ hash: 'stash', parents: ['base', 'index', 'untracked'] }]);
   assert.deepEqual(out.map((c) => c.hash), ['stash', 'base']);
   assert.deepEqual(out[0]!.parents, ['base']);
+});
+
+test('parseRepoPaths resolves a relative common dir against the cwd, not the git dir', () => {
+  const resolve = (...p: string[]) => path.posix.resolve(...p);
+  const isAbs = (p: string) => path.posix.isAbsolute(p);
+  // Main worktree opened at its root: git prints `.git`.
+  assert.deepEqual(parseRepoPaths('/w/site', '/w/site\n/w/site/.git\n.git\n', resolve, isAbs),
+    { root: '/w/site', gitDir: '/w/site/.git', commonDir: '/w/site/.git' });
+  // Workspace folder is a subfolder: git prints `../.git`.
+  assert.deepEqual(parseRepoPaths('/w/site/src', '/w/site\n/w/site/.git\n../.git\n', resolve, isAbs),
+    { root: '/w/site', gitDir: '/w/site/.git', commonDir: '/w/site/.git' });
+  // Linked worktree: common dir is absolute and points at the main repo.
+  assert.deepEqual(parseRepoPaths('/w/wt', '/w/wt\n/w/site/.git/worktrees/wt\n/w/site/.git\n', resolve, isAbs),
+    { root: '/w/wt', gitDir: '/w/site/.git/worktrees/wt', commonDir: '/w/site/.git' });
+  assert.equal(parseRepoPaths('/w', '\n', resolve, isAbs), undefined);
 });

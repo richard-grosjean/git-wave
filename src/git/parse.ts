@@ -136,3 +136,17 @@ export function foldStashes(commits: Commit[], stashes: { hash: string; parents:
   }
   return out;
 }
+
+export interface RepoPaths { root: string; gitDir: string; commonDir: string }
+
+/**
+ * Resolves `git rev-parse --show-toplevel --absolute-git-dir --git-common-dir` output.
+ * `--git-common-dir` is printed relative to the command's working directory (`.git` at the
+ * repo root, `../.git` from a subfolder), so it must be resolved against `cwd`, not the git dir.
+ */
+export function parseRepoPaths(cwd: string, stdout: string, resolve: (...p: string[]) => string, isAbsolute: (p: string) => boolean): RepoPaths | undefined {
+  const [root, gitDir, common] = stdout.trim().split('\n').map((s) => s.trim());
+  if (!root || !gitDir) return undefined;
+  const commonDir = common && isAbsolute(common) ? common : resolve(cwd, common || gitDir);
+  return { root, gitDir, commonDir };
+}
