@@ -28,6 +28,8 @@ export class Repository implements vscode.Disposable {
   private watcher: fs.FSWatcher | undefined;
   private debounce: NodeJS.Timeout | undefined;
   private remoteNames: string[] | undefined;
+  /** Linked worktrees that live inside this working tree, as relative paths (e.g. `.claude/worktrees/task`). */
+  private nestedWorktrees: string[] | undefined;
 
   private constructor(readonly root: string, readonly gitDir: string, readonly commonDir: string) {}
 
@@ -97,7 +99,18 @@ export class Repository implements vscode.Disposable {
 
   async worktrees(): Promise<Worktree[]> {
     const { stdout } = await git(this.root, ['worktree', 'list', '--porcelain']);
-    return parseWorktreeList(stdout);
+    const list = parseWorktreeList(stdout);
+    this.nestedWorktrees = list
+      .filter((w) => !w.isMain && w.path !== this.root)
+      .map((w) => path.relative(this.root, w.path))
+      .filter((rel) => rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+    return list;
+  }
+
+  /** Is this absolute path inside a linked worktree nested in this working tree? */
+  private inNestedWorktree(abs: string): boolean {
+    const rel = path.relative(this.root, abs);
+    return (this.nestedWorktrees ?? []).some((n) => rel === n || rel.startsWith(n + path.sep));
   }
 
   worktreeLock(wtPath: string, reason?: string): Promise<unknown> {
@@ -153,7 +166,13 @@ export class Repository implements vscode.Disposable {
 
   /** Changed files in the working tree and index (`git status --porcelain -z`). */
   async status(): Promise<CommitFile[]> {
-    const { stdout } = await git(this.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+    if (this.nestedWorktrees === undefined) await this.worktrees().catch(() => undefined);
+    // Worktrees checked out inside this tree are untracked from git's point of view, but they are
+    // not "our" changes; exclude them so the uncommitted row only shows this worktree's files.
+    const exclude = (this.nestedWorktrees ?? []).map((n) => `:(exclude)${n.split(path.sep).join('/')}`);
+    const args = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
+    if (exclude.length) args.push('--', '.', ...exclude);
+    const { stdout } = await git(this.root, args);
     return parseStatusZ(stdout);
   }
 
@@ -239,7 +258,11 @@ export class Repository implements vscode.Disposable {
   watchWorkingTree(): void {
     if (this.wtWatcher) return;
     this.wtWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.root, '**/*'));
-    const onFs = (u: vscode.Uri) => { if (!u.fsPath.includes(`${path.sep}.git${path.sep}`)) this.fireWorkingTree(); };
+    // Edits inside a nested worktree belong to that worktree; its git dir is watched via commonDir.
+    const onFs = (u: vscode.Uri) => {
+      if (u.fsPath.includes(`${path.sep}.git${path.sep}`) || this.inNestedWorktree(u.fsPath)) return;
+      this.fireWorkingTree();
+    };
     this.wtWatcher.onDidChange(onFs); this.wtWatcher.onDidCreate(onFs); this.wtWatcher.onDidDelete(onFs);
   }
 
