@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: the graph now updates live again. Repos opened at their root resolved the git common dir to a non-existent `.git/.git`, so the ref/commit/worktree watcher never started and only the manual refresh picked up changes.
+
 ## 0.3.1 (2026-11-09)
 
 - Worktrees checked out inside the repository (e.g. Claude Code's `.claude/worktrees/`) no longer appear as untracked files in the uncommitted row, and edits inside them no longer trigger status refreshes of the parent. Their commits, locks and removal still update the graph instantly.
