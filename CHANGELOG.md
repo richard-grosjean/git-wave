@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-09)
 
 - Marketplace readiness: screenshot, CI, tag-triggered release workflow, release script.
 - Fix: stash commits no longer show a stray `refs/stash` branch chip.
