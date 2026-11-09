@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 (2026-11-09)
 
 - Worktrees checked out inside the repository (e.g. Claude Code's `.claude/worktrees/`) no longer appear as untracked files in the uncommitted row, and edits inside them no longer trigger status refreshes of the parent. Their commits, locks and removal still update the graph instantly.
 - Background refreshes are seamless: when git changes refs or the working tree, the graph repaints in place, keeps your scroll depth, and no longer flashes the spinner.
