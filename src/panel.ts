@@ -9,6 +9,9 @@ import { GraphLayout } from './graph/layout';
 import { UNCOMMITTED, type Commit, type CommitFile, type GraphConfig, type HostMessage, type Stash, type WebviewMessage, type Worktree } from './shared/types';
 import type { WorktreeActions } from './worktreeCommands';
 
+/** Cap on how many already-loaded commits a background reload refetches at once. */
+const MAX_RELOAD_DEPTH = 5000;
+
 export const VIEW_TYPE = 'gitwave.graph';
 
 export class GraphPanel implements vscode.Disposable {
@@ -82,7 +85,7 @@ export class GraphPanel implements vscode.Disposable {
     this.repo = repo;
     repo.watchWorkingTree();
     this.repoSubs = [
-      repo.onDidChange(() => void this.reload()),
+      repo.onDidChange(() => void this.reload(true)),
       repo.onDidChangeWorkingTree(() => void this.refreshStatus()),
     ];
     void this.reload();
@@ -166,12 +169,17 @@ export class GraphPanel implements vscode.Disposable {
     await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
   }
 
-  /** Full reload: restart the layout and fetch the first page plus worktrees. */
-  async reload(): Promise<void> {
+  /**
+   * Full reload: restart the layout and refetch, plus worktrees.
+   * Keeps the current depth (how far the user has scrolled) so the list does not shrink back to
+   * one page, and when `quiet` (background change) skips the spinner so the graph just repaints.
+   */
+  async reload(quiet = false): Promise<void> {
     this.layout = new GraphLayout(readConfig().colors.length);
+    const keep = Math.min(this.loaded, MAX_RELOAD_DEPTH);
     this.loaded = 0;
     this.hasMore = false;
-    await Promise.all([this.loadPage(true), this.loadWorktrees()]);
+    await Promise.all([this.loadPage(true, { quiet, minCount: keep }), this.loadWorktrees()]);
   }
 
   /** Re-check the working tree; reload the graph only if the uncommitted row would change. */
@@ -182,7 +190,7 @@ export class GraphPanel implements vscode.Disposable {
       const before = this.statusFiles;
       const changed = files.length !== before.length || files.some((f, i) => f.path !== before[i]?.path || f.status !== before[i]?.status);
       if (!changed) return;
-      if ((files.length === 0) !== (before.length === 0)) { await this.reload(); return; }
+      if ((files.length === 0) !== (before.length === 0)) { await this.reload(true); return; }
       this.statusFiles = files;
       this.post({ type: 'status', files });
     } catch { /* ignore transient errors */ }
@@ -198,7 +206,7 @@ export class GraphPanel implements vscode.Disposable {
     }
   }
 
-  private async loadPage(first: boolean): Promise<void> {
+  private async loadPage(first: boolean, opts: { quiet?: boolean; minCount?: number } = {}): Promise<void> {
     const repo = this.repo;
     if (!repo) return;
     if (!first && (!this.hasMore || this.loading)) return;
@@ -207,14 +215,14 @@ export class GraphPanel implements vscode.Disposable {
     const gen = ++this.generation;
     const cfg = vscode.workspace.getConfiguration('gitwave');
     this.loading = true;
-    this.post({ type: 'loading', loading: true });
+    if (!opts.quiet) this.post({ type: 'loading', loading: true });
     try {
       if (first) {
         [this.stashes, this.statusFiles] = await Promise.all([repo.stashes(), repo.status()]);
       }
       const { commits: raw, hasMore } = await repo.log({
         skip: this.loaded,
-        maxCount: cfg.get<number>('commitsPerPage', 500),
+        maxCount: Math.max(cfg.get<number>('commitsPerPage', 500), opts.minCount ?? 0),
         remotes: cfg.get<boolean>('showRemoteBranches', true),
         tags: cfg.get<boolean>('showTags', true),
         extraRevs: this.stashes.map((s) => s.hash),
@@ -237,7 +245,7 @@ export class GraphPanel implements vscode.Disposable {
     } catch (e) {
       if (gen === this.generation && !cts.token.isCancellationRequested) this.post({ type: 'error', message: (e as Error).message });
     } finally {
-      if (gen === this.generation) { this.loading = false; this.post({ type: 'loading', loading: false }); }
+      if (gen === this.generation) { this.loading = false; if (!opts.quiet) this.post({ type: 'loading', loading: false }); }
     }
   }
 

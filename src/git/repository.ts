@@ -215,7 +215,7 @@ export class Repository implements vscode.Disposable {
         const f = typeof file === 'string' ? file : '';
         // Ignore index churn and our own lock files; refs/HEAD/packed-refs/worktrees are what matter.
         if (f.endsWith('.lock') || f.startsWith('objects')) return;
-        if (f === 'index' || f.endsWith('/index')) { this.fireWorkingTree(); return; }
+        if (f === 'index' || f.endsWith('/index') || f.endsWith('\\index')) { this.fireWorkingTree(); return; }
         if (this.debounce) clearTimeout(this.debounce);
         this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
       });

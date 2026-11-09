@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Background refreshes are seamless: when git changes refs or the working tree, the graph repaints in place, keeps your scroll depth, and no longer flashes the spinner.
+
 ## 0.3.0 (2026-11-09)
 
 - Marketplace readiness: screenshot, CI, tag-triggered release workflow, release script.
