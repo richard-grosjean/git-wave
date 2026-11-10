@@ -134,11 +134,16 @@ export class Repository implements vscode.Disposable {
     return git(this.root, ['worktree', 'prune']);
   }
 
-  async worktreeAdd(wtPath: string, branch: string | undefined, newBranch: boolean): Promise<unknown> {
+  /**
+   * `git worktree add`. With `branch` + `newBranch` creates the branch at `startPoint` (default HEAD), optionally
+   * tracking it; with just `branch` checks out an existing branch; without `branch` makes a detached worktree.
+   */
+  async worktreeAdd(wtPath: string, o: { branch?: string; newBranch?: boolean; startPoint?: string; track?: boolean } = {}): Promise<unknown> {
     const args = ['worktree', 'add'];
-    if (branch && newBranch) args.push('-b', branch, wtPath);
-    else if (branch) args.push(wtPath, branch);
+    if (o.branch && o.newBranch) args.push(...(o.track ? ['--track'] : []), '-b', o.branch, wtPath);
+    else if (o.branch) args.push(wtPath, o.branch);
     else args.push('--detach', wtPath);
+    if (o.startPoint && (o.newBranch || !o.branch)) args.push(o.startPoint);
     return git(this.root, args);
   }
 

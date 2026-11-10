@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Branches now render as one segmented tag with what belongs to them: `branch | origin | worktree | this window`. Remote branches at the same commit as their local branch fold into it as a remote segment (they stay separate when they've diverged). Worktrees get their own icon (codicons bumped to 0.0.45) and are only shown when the repo has more than one. Each segment keeps its own right-click menu.
+- Worktree actions moved to the right-click menu on the tag. The folder-icon badge and its click-to-open quick pick are gone.
+- "Open" / "Open in New Window" are hidden for the worktree this window already has open (graph and Worktrees view), and say so instead of silently doing nothing. The Worktrees view marks it "● this window".
+- New right-click items in the graph: **Create Worktree for Branch** (local branches without a worktree, and remote branches, which get a local tracking branch), **Create Worktree at Commit** (new branch or detached), and **Open Worktree in New Window / This Window** on branches that already have one.
+- A newly created worktree opens in a new window straight away.
+- Fix: "Unlock" no longer shows up for unlocked worktrees in the Worktrees view.
+
 ## 0.3.2 (2026-11-09)
 
 - Fix: the graph now updates live again. Repos opened at their root resolved the git common dir to a non-existent `.git/.git`, so the ref/commit/worktree watcher never started and only the manual refresh picked up changes.

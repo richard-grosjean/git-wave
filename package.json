@@ -245,6 +245,26 @@
         "category": "Git Wave"
       },
       {
+        "command": "gitwave.branch.createWorktree",
+        "title": "Create Worktree for Branch",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.createWorktree",
+        "title": "Create Worktree at Commit",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.worktree.openNewWindow",
+        "title": "Open Worktree in New Window",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.worktree.open",
+        "title": "Open Worktree in This Window",
+        "category": "Git Wave"
+      },
+      {
         "command": "gitwave.ctx.worktree.openNewWindow",
         "title": "Open Worktree in New Window",
         "category": "Git Wave"
@@ -320,7 +340,7 @@
       "view/item/context": [
         {
           "command": "gitwave.worktree.unlock",
-          "when": "view == gitwave.worktrees && viewItem =~ /locked/",
+          "when": "view == gitwave.worktrees && viewItem =~ /:locked/",
           "group": "inline@1"
         },
         {
@@ -330,17 +350,17 @@
         },
         {
           "command": "gitwave.worktree.openNewWindow",
-          "when": "view == gitwave.worktrees",
+          "when": "view == gitwave.worktrees && viewItem =~ /^(?!.*:current).*$/",
           "group": "inline@2"
         },
         {
           "command": "gitwave.worktree.open",
-          "when": "view == gitwave.worktrees",
+          "when": "view == gitwave.worktrees && viewItem =~ /^(?!.*:current).*$/",
           "group": "1_open@1"
         },
         {
           "command": "gitwave.worktree.openNewWindow",
-          "when": "view == gitwave.worktrees",
+          "when": "view == gitwave.worktrees && viewItem =~ /^(?!.*:current).*$/",
           "group": "1_open@2"
         },
         {
@@ -355,7 +375,7 @@
         },
         {
           "command": "gitwave.worktree.unlock",
-          "when": "view == gitwave.worktrees && viewItem =~ /locked/",
+          "when": "view == gitwave.worktrees && viewItem =~ /:locked/",
           "group": "2_lock@1"
         },
         {
@@ -370,6 +390,22 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "gitwave.branch.createWorktree",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.createWorktree",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.worktree.openNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.worktree.open",
+          "when": "false"
+        },
         {
           "command": "gitwave.worktree.lock",
           "when": "false"
@@ -658,13 +694,38 @@
           "group": "3_danger@1"
         },
         {
+          "command": "gitwave.commit.createWorktree",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "gitwave.branch.worktree.openNewWindow",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && worktreePath && !worktreeIsCurrent",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "gitwave.branch.worktree.open",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && worktreePath && !worktreeIsCurrent",
+          "group": "1_worktree@2"
+        },
+        {
+          "command": "gitwave.branch.createWorktree",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && !worktreePath",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "gitwave.branch.createWorktree",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "1_worktree@1"
+        },
+        {
           "command": "gitwave.ctx.worktree.openNewWindow",
-          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree'",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && !isCurrent",
           "group": "1_open@1"
         },
         {
           "command": "gitwave.ctx.worktree.open",
-          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree'",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && !isCurrent",
           "group": "1_open@2"
         },
         {
@@ -778,7 +839,7 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/vscode": "^1.90.0",
-    "@vscode/codicons": "^0.0.36",
+    "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.0"

@@ -7,7 +7,7 @@ import { foldStashes } from './git/parse';
 import { shortBranch } from './git/worktree-parse';
 import { GraphLayout } from './graph/layout';
 import { UNCOMMITTED, type Commit, type CommitFile, type GraphConfig, type HostMessage, type Stash, type WebviewMessage, type Worktree } from './shared/types';
-import type { WorktreeActions } from './worktreeCommands';
+import { isCurrentWorktree, type WorktreeActions } from './worktreeCommands';
 
 /** Cap on how many already-loaded commits a background reload refetches at once. */
 const MAX_RELOAD_DEPTH = 5000;
@@ -144,11 +144,6 @@ export class GraphPanel implements vscode.Disposable {
         if (repo && wt) await this.actions.run(repo, wt, m.action);
         return;
       }
-      case 'worktreeMenu': {
-        const wt = this.worktrees.find((w) => w.path === m.path);
-        if (repo && wt) await this.actions.menu(repo, wt);
-        return;
-      }
     }
   }
 
@@ -200,7 +195,7 @@ export class GraphPanel implements vscode.Disposable {
     if (!this.repo) return;
     try {
       this.worktrees = await this.repo.worktrees();
-      this.post({ type: 'worktrees', worktrees: this.worktrees.map((w) => ({ ...w, branch: shortBranch(w.branch) })) });
+      this.post({ type: 'worktrees', worktrees: this.worktrees.map((w) => ({ ...w, branch: shortBranch(w.branch), isCurrent: isCurrentWorktree(w.path) })) });
     } catch (e) {
       this.post({ type: 'error', message: (e as Error).message });
     }

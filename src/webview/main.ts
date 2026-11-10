@@ -225,57 +225,104 @@ function hashHue(s: string): number {
   return Math.abs(h) % 360;
 }
 
+/** Splits `origin/feat/x` into remote `origin` and branch `feat/x`. */
+function splitRemote(name: string): { remote: string; branch: string } {
+  const i = name.indexOf('/');
+  return i < 0 ? { remote: name, branch: '' } : { remote: name.slice(0, i), branch: name.slice(i + 1) };
+}
+
+/**
+ * Ref chips for a commit. A local branch, the remote branches pointing at the same commit with the same name,
+ * and the branch's worktree are joined into one segmented tag (`branch | origin | worktree | this window`).
+ * Each segment keeps its own right-click menu.
+ */
 function refChips(c: Commit, color: string): HTMLElement[] {
   const out: HTMLElement[] = [];
+  const locals = new Set(c.refs.filter((r) => r.kind === 'branch').map((r) => r.name));
+  const joinedRemotes = new Set(c.refs.filter((r) => r.kind === 'remote' && locals.has(splitRemote(r.name).branch)).map((r) => r.name));
   const shownWorktrees = new Set<string>();
   for (const r of c.refs) {
-    const chip = document.createElement('span');
-    chip.className = `chip ${r.kind}${r.isHead ? ' is-head' : ''}`;
-    chip.style.setProperty('--chip', color);
-    const icon = r.kind === 'tag' ? 'tag' : r.kind === 'remote' ? 'cloud' : r.kind === 'stash' ? 'archive' : 'git-branch';
-    chip.innerHTML = `<span class="codicon codicon-${icon}"></span>`;
-    chip.append(r.name);
-    const ctx: Record<string, unknown> = { webviewSection: r.kind === 'head' ? 'commit' : r.kind, name: r.name, hash: c.hash, isHead: !!r.isHead, preventDefaultContextMenuItems: true };
-    if (r.kind === 'stash') {
-      const m = /\{(\d+)\}/.exec(r.name);
-      ctx.stashIndex = m ? Number(m[1]) : 0;
+    if (joinedRemotes.has(r.name)) continue;
+    const chip = refChip(c, r, color);
+    if (r.kind !== 'branch') { out.push(chip); continue; }
+    const segments = [chip];
+    for (const rr of c.refs) {
+      if (rr.kind === 'remote' && joinedRemotes.has(rr.name) && splitRemote(rr.name).branch === r.name) {
+        segments.push(refChip(c, rr, color, splitRemote(rr.name).remote));
+      }
     }
-    chip.title = r.kind === 'remote' ? `Remote branch ${r.name}` : r.kind === 'tag' ? `Tag ${r.name}` : r.kind === 'stash' ? `Stash ${r.name}` : `Branch ${r.name}${r.isHead ? ' (HEAD)' : ''}`;
-    const wt = r.kind === 'branch' ? worktreesByBranch.get(r.name) : undefined;
+    const wt = worktreesByBranch.get(r.name);
     if (wt) {
+      const ctx = JSON.parse(chip.dataset.vscodeContext!);
+      chip.dataset.vscodeContext = JSON.stringify({ ...ctx, worktreePath: wt.path, worktreeIsCurrent: !!wt.isCurrent });
       shownWorktrees.add(wt.path);
-      chip.classList.add('has-worktree', wt.locked ? 'locked' : 'unlocked');
-      chip.append(worktreeBadge(wt));
-      chip.title += `\nWorktree: ${wt.path}${wt.locked ? `\n🔒 Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : ''}\nClick the folder icon for actions`;
+      segments.push(...worktreeSegments(wt, color));
     }
-    chip.dataset.vscodeContext = JSON.stringify(ctx);
-    out.push(chip);
+    const g = group(segments);
+    if (r.isHead) g.classList.add('is-head');
+    out.push(g);
   }
+  // Worktrees not attached to a branch chip (detached HEADs).
   for (const wt of worktreesByHead.get(c.hash) ?? []) {
-    if (shownWorktrees.has(wt.path)) continue;
-    const chip = document.createElement('span');
-    chip.className = `chip worktree ${wt.locked ? 'locked' : 'unlocked'}`;
-    chip.style.setProperty('--chip', color);
-    chip.append(worktreeBadge(wt), wt.branch ?? basename(wt.path));
-    chip.title = `Worktree: ${wt.path}${wt.detached ? ' (detached)' : ''}${wt.locked ? `\n🔒 Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : ''}\nClick for actions`;
-    chip.dataset.worktree = wt.path;
-    chip.dataset.vscodeContext = worktreeContext(wt);
-    out.push(chip);
+    const segs = shownWorktrees.has(wt.path) ? [] : worktreeSegments(wt, color);
+    if (segs.length) out.push(group(segs));
   }
   return out;
 }
 
-function worktreeContext(wt: Worktree): string {
-  return JSON.stringify({ webviewSection: 'worktree', path: wt.path, locked: wt.locked, isMain: wt.isMain, preventDefaultContextMenuItems: true });
+function group(segments: HTMLElement[]): HTMLElement {
+  if (segments.length === 1) return segments[0]!;
+  const g = document.createElement('span');
+  g.className = 'ref-group';
+  g.append(...segments);
+  return g;
 }
 
-function worktreeBadge(wt: Worktree): HTMLElement {
-  const b = document.createElement('span');
-  b.className = 'wt-badge';
-  b.dataset.worktree = wt.path;
-  b.dataset.vscodeContext = worktreeContext(wt);
-  b.innerHTML = `<span class="codicon codicon-${wt.isMain ? 'root-folder' : 'folder'}"></span>${wt.locked ? '<span class="codicon codicon-lock lock"></span>' : ''}`;
-  return b;
+function refChip(c: Commit, r: Commit['refs'][number], color: string, label = r.name): HTMLElement {
+  const chip = document.createElement('span');
+  chip.className = `chip ${r.kind}${r.isHead ? ' is-head' : ''}`;
+  chip.style.setProperty('--chip', color);
+  const icon = r.kind === 'tag' ? 'tag' : r.kind === 'remote' ? 'cloud' : r.kind === 'stash' ? 'archive' : 'git-branch';
+  chip.innerHTML = `<span class="codicon codicon-${icon}"></span>`;
+  chip.append(label);
+  const ctx: Record<string, unknown> = { webviewSection: r.kind === 'head' ? 'commit' : r.kind, name: r.name, hash: c.hash, isHead: !!r.isHead, preventDefaultContextMenuItems: true };
+  if (r.kind === 'stash') {
+    const m = /\{(\d+)\}/.exec(r.name);
+    ctx.stashIndex = m ? Number(m[1]) : 0;
+  }
+  chip.title = r.kind === 'remote' ? `Remote branch ${r.name}` : r.kind === 'tag' ? `Tag ${r.name}` : r.kind === 'stash' ? `Stash ${r.name}` : `Branch ${r.name}${r.isHead ? ' (HEAD)' : ''}`;
+  chip.dataset.vscodeContext = JSON.stringify(ctx);
+  return chip;
+}
+
+/**
+ * Worktree segment(s): `worktree-name`, plus a `this window` segment when it's the one open here. Omitted when the
+ * repo has a single worktree (unless detached), where it would only repeat the obvious.
+ */
+function worktreeSegments(wt: Worktree, color: string): HTMLElement[] {
+  if (worktrees.length <= 1 && !wt.detached) return [];
+  const ctx = JSON.stringify({ webviewSection: 'worktree', path: wt.path, locked: wt.locked, isMain: wt.isMain, isCurrent: !!wt.isCurrent, preventDefaultContextMenuItems: true });
+  const title = [
+    `${wt.isMain ? 'Main worktree' : 'Worktree'}: ${wt.path}`,
+    wt.isCurrent ? 'Open in this window' : '',
+    wt.locked ? `Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : '',
+    'Right-click for worktree actions',
+  ].filter(Boolean).join('\n');
+  const tag = document.createElement('span');
+  tag.className = `chip wt${wt.isCurrent ? ' is-current' : ''}${wt.locked ? ' locked' : ''}`;
+  tag.style.setProperty('--chip', color);
+  tag.innerHTML = '<span class="codicon codicon-worktree"></span>';
+  tag.append(wt.detached ? `${basename(wt.path)} (detached)` : basename(wt.path));
+  if (wt.locked) tag.insertAdjacentHTML('beforeend', '<span class="codicon codicon-lock lock"></span>');
+  tag.title = title;
+  tag.dataset.vscodeContext = ctx;
+  if (!wt.isCurrent) return [tag];
+  const here = document.createElement('span');
+  here.className = 'chip wt-here';
+  here.textContent = 'this window';
+  here.title = title;
+  here.dataset.vscodeContext = ctx;
+  return [tag, here];
 }
 
 function drawGraph(first: number, last: number, top: number, height: number): void {
@@ -504,8 +551,6 @@ scroller.addEventListener('wheel', (e) => {
 }, { passive: false });
 rowsEl.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
-  const wtEl = t.closest<HTMLElement>('[data-worktree]');
-  if (wtEl?.dataset.worktree) { e.stopPropagation(); post({ type: 'worktreeMenu', path: wtEl.dataset.worktree }); return; }
   if (t.closest('.c-hash')) { const row = t.closest<HTMLElement>('.row'); if (row?.dataset.hash && row.dataset.hash !== UNCOMMITTED) post({ type: 'copy', text: row.dataset.hash }); return; }
   const row = t.closest<HTMLElement>('.row');
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash);

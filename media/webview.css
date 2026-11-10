@@ -75,7 +75,7 @@ body {
 #empty { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0.6; }
 
 /* ref chips */
-.refs { display: inline-flex; gap: 4px; flex-shrink: 0; }
+.refs { display: inline-flex; gap: 8px; flex-shrink: 0; }
 .chip {
   display: inline-flex; align-items: center; gap: 3px; height: calc(var(--row-h) - 8px);
   padding: 0 6px; border-radius: 3px; font-size: 0.88em; line-height: 1;
@@ -88,16 +88,22 @@ body {
 .chip.tag { border-radius: 10px; }
 .chip.head { font-style: italic; }
 .chip.stash { border-style: dashed; opacity: 0.9; }
-.wt-badge {
-  display: inline-flex; align-items: center; gap: 1px; margin-left: 2px; padding: 1px 3px; border-radius: 3px;
-  background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); cursor: pointer;
+/* segmented ref tag: branch | origin | worktree | this window */
+.ref-group { display: inline-flex; }
+.ref-group > .chip:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ref-group > .chip + .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+.ref-group > .chip.remote { border-style: solid; opacity: 1; color: var(--vscode-descriptionForeground); }
+.ref-group > .chip.is-head + .chip { border-left-color: transparent; }
+/* a joined remote is the same branch: match the HEAD branch's solid fill, with a faint divider */
+.ref-group.is-head > .chip.remote {
+  background: var(--chip); color: var(--vscode-editor-background); font-weight: normal;
+  border-left-color: color-mix(in srgb, var(--vscode-editor-background) 45%, var(--chip));
 }
-.chip.is-head .wt-badge { background: color-mix(in srgb, var(--vscode-editor-background) 25%, transparent); }
-.wt-badge:hover { background: color-mix(in srgb, var(--vscode-foreground) 28%, transparent); }
-.wt-badge .lock { color: var(--vscode-editorWarning-foreground, #e3b341); }
-.chip.is-head .wt-badge .lock { color: inherit; }
-.chip.worktree { cursor: pointer; border-style: dotted; }
-.chip.worktree .wt-badge { margin-left: 0; background: none; padding: 0; }
+/* worktree segment: neutral; filled when it's this window's worktree */
+.chip.wt { border-color: var(--chip); background: transparent; color: var(--vscode-descriptionForeground); }
+.chip.wt.is-current { color: var(--vscode-foreground); }
+.chip.wt-here { border-color: var(--vscode-focusBorder); background: var(--vscode-focusBorder); color: var(--vscode-editor-background); }
+.chip.wt .lock { color: var(--vscode-editorWarning-foreground, #e3b341); }
 
 /* detail pane */
 #detail {

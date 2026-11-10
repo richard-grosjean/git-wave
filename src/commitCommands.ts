@@ -12,6 +12,9 @@ export interface GraphContext {
   stashIndex?: number;
   subject?: string;
   path?: string;
+  /** On branch chips: the worktree that has this branch checked out, if any. */
+  worktreePath?: string;
+  worktreeIsCurrent?: boolean;
 }
 
 /** Actions on commits, branches, tags and stashes, invoked from the graph's context menus. */

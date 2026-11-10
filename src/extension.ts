@@ -102,6 +102,23 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   for (const op of ['apply', 'pop', 'drop'] as const) {
     reg(`gitwave.stash.${op}`, (c: GraphContext) => c.stashIndex !== undefined && commitActions.stash(c.stashIndex, op));
   }
+  const graphRepo = () => GraphPanel.current?.repository;
+  reg('gitwave.branch.createWorktree', async (c: GraphContext) => {
+    const repo = graphRepo();
+    if (repo && c.name) await actions.add(repo, { kind: c.webviewSection === 'remote' ? 'remote' : 'branch', name: c.name });
+  });
+  reg('gitwave.commit.createWorktree', async (c: GraphContext) => {
+    const repo = graphRepo();
+    if (repo && c.hash) await actions.add(repo, { kind: 'commit', hash: c.hash });
+  });
+  for (const action of ['open', 'openNewWindow'] as const) {
+    reg(`gitwave.branch.worktree.${action}`, async (c: GraphContext) => {
+      const repo = graphRepo();
+      if (!repo || !c.worktreePath) return;
+      const wt = (await repo.worktrees()).find((w) => w.path === c.worktreePath);
+      if (wt) await actions.run(repo, wt, action);
+    });
+  }
   for (const action of ['open', 'openNewWindow', 'lock', 'unlock', 'remove', 'copyPath'] as const) {
     reg(`gitwave.ctx.worktree.${action}`, async (c: GraphContext) => {
       const repo = GraphPanel.current?.repository;

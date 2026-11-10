@@ -57,6 +57,8 @@ export interface Worktree {
   locked: boolean;
   lockReason?: string;
   prunable?: string;
+  /** True when this worktree is a workspace folder of the current VS Code window. */
+  isCurrent?: boolean;
 }
 
 export interface CommitFile {
@@ -108,5 +110,4 @@ export type WebviewMessage =
   | { type: 'select'; hash: string }
   | { type: 'openFile'; hash: string; path: string; status: string; oldPath?: string }
   | { type: 'copy'; text: string }
-  | { type: 'worktree'; path: string; action: WorktreeAction }
-  | { type: 'worktreeMenu'; path: string };
+  | { type: 'worktree'; path: string; action: WorktreeAction };
