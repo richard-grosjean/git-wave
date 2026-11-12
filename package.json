@@ -230,6 +230,11 @@
         "category": "Git Wave"
       },
       {
+        "command": "gitwave.tag.deleteRemote",
+        "title": "Delete Tag from Remote…",
+        "category": "Git Wave"
+      },
+      {
         "command": "gitwave.stash.apply",
         "title": "Apply Stash",
         "category": "Git Wave"
@@ -270,6 +275,26 @@
         "category": "Git Wave"
       },
       {
+        "command": "gitwave.branch.push",
+        "title": "Push Branch",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.pull",
+        "title": "Pull Branch",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.setUpstream",
+        "title": "Set Upstream…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.createPullRequest",
+        "title": "Create Pull Request…",
+        "category": "Git Wave"
+      },
+      {
         "command": "gitwave.ctx.worktree.openNewWindow",
         "title": "Open Worktree in New Window",
         "category": "Git Wave"
@@ -292,6 +317,16 @@
       {
         "command": "gitwave.ctx.worktree.copyPath",
         "title": "Copy Worktree Path",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.uncommitted.stash",
+        "title": "Stash Changes…",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.uncommitted.discard",
+        "title": "Discard Changes…",
         "category": "Git Wave"
       }
     ],
@@ -508,6 +543,22 @@
           "when": "false"
         },
         {
+          "command": "gitwave.branch.push",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.pull",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.setUpstream",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.createPullRequest",
+          "when": "false"
+        },
+        {
           "command": "gitwave.tag.checkout",
           "when": "false"
         },
@@ -517,6 +568,10 @@
         },
         {
           "command": "gitwave.tag.copyName",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.tag.deleteRemote",
           "when": "false"
         },
         {
@@ -553,6 +608,14 @@
         },
         {
           "command": "gitwave.ctx.worktree.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.uncommitted.stash",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.uncommitted.discard",
           "when": "false"
         }
       ],
@@ -693,6 +756,11 @@
           "group": "9_copy@1"
         },
         {
+          "command": "gitwave.tag.deleteRemote",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'tag'",
+          "group": "3_edit@2"
+        },
+        {
           "command": "gitwave.stash.apply",
           "when": "webviewId == 'gitwave.graph' && webviewSection == 'stash'",
           "group": "1_stash@1"
@@ -728,9 +796,34 @@
           "group": "1_worktree@1"
         },
         {
+          "command": "gitwave.branch.push",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "4_remote@1"
+        },
+        {
+          "command": "gitwave.branch.pull",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && hasUpstream",
+          "group": "4_remote@2"
+        },
+        {
+          "command": "gitwave.branch.setUpstream",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "4_remote@3"
+        },
+        {
+          "command": "gitwave.branch.createPullRequest",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch'",
+          "group": "4_remote@4"
+        },
+        {
           "command": "gitwave.branch.createWorktree",
           "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
           "group": "1_worktree@1"
+        },
+        {
+          "command": "gitwave.branch.createPullRequest",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "4_remote@4"
         },
         {
           "command": "gitwave.ctx.worktree.openNewWindow",
@@ -761,6 +854,16 @@
           "command": "gitwave.ctx.worktree.remove",
           "when": "webviewId == 'gitwave.graph' && webviewSection == 'worktree' && !isMain",
           "group": "4_danger@1"
+        },
+        {
+          "command": "gitwave.uncommitted.stash",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'uncommitted'",
+          "group": "1_stash@1"
+        },
+        {
+          "command": "gitwave.uncommitted.discard",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'uncommitted'",
+          "group": "3_edit@1"
         }
       ]
     },

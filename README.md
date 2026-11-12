@@ -31,11 +31,14 @@ code --install-extension rgro.git-wave
 - **Lock / unlock / add / remove / prune** worktrees from the sidebar or straight from a badge in
   the graph. Prunable (stale) worktrees are flagged.
 - **Uncommitted changes** row at the top with a dashed strand down to HEAD; select it to see the
-  working-tree files and open their diffs.
+  working-tree files and open their diffs. Right-click it to stash or discard the changes.
 - **Right-click actions** on commits, branches, remote branches, tags, stashes and worktree badges:
   checkout, create branch, create tag, merge (fast-forward, merge commit, squash, ff-only), rebase,
   cherry-pick, revert, reset (soft/mixed/hard), rename, delete, apply/pop/drop stash, copy.
   Native VS Code menus, so they follow your theme and keybindings.
+- **Remotes from the graph.** Push, pull and set upstream on branches, open a pull request
+  (GitHub, GitLab, Bitbucket), and delete remote branches and tags. Branch tags show how far
+  ahead (↑) or behind (↓) their upstream they are as of the last fetch.
 - **Worktree-aware checkout.** Checking out a branch that lives in another worktree offers to open
   that worktree instead of failing.
 - **Author avatars** from GitHub (using your `gh` CLI login when available, so no rate-limit

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { GitError } from './git/exec';
 import type { Repository } from './git/repository';
+import { pullRequestUrl } from './git/remote-url';
 import { shortBranch } from './git/worktree-parse';
 
 /** Context object VS Code passes from `data-vscode-context` on right-click in the webview. */
@@ -15,6 +16,10 @@ export interface GraphContext {
   /** On branch chips: the worktree that has this branch checked out, if any. */
   worktreePath?: string;
   worktreeIsCurrent?: boolean;
+  /** On local branch chips: the configured upstream, e.g. `origin/main`. */
+  upstream?: string;
+  /** The upstream is configured and still exists. */
+  hasUpstream?: boolean;
 }
 
 /** Actions on commits, branches, tags and stashes, invoked from the graph's context menus. */
@@ -100,10 +105,9 @@ export class CommitActions {
   async deleteRemoteBranch(remoteBranch: string): Promise<void> {
     const repo = this.repoFor();
     if (!repo) return;
-    // Remote names can contain '/', so match against the configured remotes, longest first.
-    const remote = [...await repo.remotes()].sort((a, b) => b.length - a.length).find((r) => remoteBranch.startsWith(`${r}/`));
-    if (!remote) { void vscode.window.showErrorMessage(`Git Wave: no remote found for "${remoteBranch}".`); return; }
-    const branch = remoteBranch.slice(remote.length + 1);
+    const split = await repo.splitRemoteRef(remoteBranch);
+    if (!split) { void vscode.window.showErrorMessage(`Git Wave: no remote found for "${remoteBranch}".`); return; }
+    const { remote, branch } = split;
     if (branch === 'HEAD') { void vscode.window.showErrorMessage(`Git Wave: "${remoteBranch}" is the remote's default-branch pointer and can't be deleted.`); return; }
     const ok = await vscode.window.showWarningMessage(
       `Delete branch "${branch}" on remote "${remote}"?`,
@@ -119,6 +123,97 @@ export class CommitActions {
         else throw e;
       }
     });
+  }
+
+  // ---------- remotes ----------
+
+  /** The only remote, or the user's pick (origin first). Undefined when there are none or the pick is cancelled. */
+  private async pickRemote(repo: Repository, title: string): Promise<string | undefined> {
+    const remotes = await repo.remotes();
+    if (remotes.length === 0) { void vscode.window.showErrorMessage('Git Wave: this repository has no remotes.'); return undefined; }
+    if (remotes.length === 1) return remotes[0];
+    return vscode.window.showQuickPick([...remotes].sort((a, b) => (a === 'origin' ? -1 : b === 'origin' ? 1 : a.localeCompare(b))), { title });
+  }
+
+  /** Pushes a local branch to its upstream, or to a chosen remote with `-u` when it has none. Offers a force push when rejected. */
+  async pushBranch(name: string, upstream: string | undefined): Promise<boolean> {
+    const repo = this.repoFor();
+    if (!repo) return false;
+    let target = upstream ? await repo.splitRemoteRef(upstream) : undefined;
+    const setUpstream = !target;
+    if (!target) {
+      const remote = await this.pickRemote(repo, `Push ${name} to`);
+      if (!remote) return false;
+      target = { remote, branch: name };
+    }
+    const { remote, branch } = target;
+    let ok = false;
+    await this.guard(`Push ${name}`, async (r) => {
+      try { await r.push(name, remote, branch, { setUpstream }); ok = true; }
+      catch (e) {
+        if (!/rejected|non-fast-forward|fetch first/i.test(String(e))) throw e;
+        const force = await vscode.window.showWarningMessage(
+          `Push rejected: ${remote}/${branch} has commits that "${name}" doesn't.`,
+          { modal: true, detail: 'Pull first to keep them, or force push to replace the remote branch with yours (--force-with-lease: refuses if the remote changed since your last fetch).' },
+          'Force Push',
+        );
+        if (force) { await r.push(name, remote, branch, { setUpstream, force: true }); ok = true; }
+      }
+    });
+    return ok;
+  }
+
+  /**
+   * Brings a branch up to date with its upstream: `git pull` when it's checked out here or in another worktree,
+   * otherwise a fast-forward of the branch ref.
+   */
+  async pullBranch(c: GraphContext): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo || !c.name) return;
+    if (!c.upstream) { void vscode.window.showInformationMessage(`Git Wave: "${c.name}" has no upstream. Use Set Upstream first.`); return; }
+    if (c.isHead) { await this.guard(`Pull ${c.name}`, (r) => r.pull()); return; }
+    if (c.worktreePath) { const wt = c.worktreePath; await this.guard(`Pull ${c.name}`, (r) => r.pull(wt)); return; }
+    const split = await repo.splitRemoteRef(c.upstream);
+    if (!split) { void vscode.window.showErrorMessage(`Git Wave: "${c.upstream}" isn't a remote branch.`); return; }
+    await this.guard(`Pull ${c.name}`, async (r) => {
+      try { await r.fastForward(c.name!, split.remote, split.branch); }
+      catch (e) {
+        if (!/non-fast-forward|rejected/i.test(String(e))) throw e;
+        void vscode.window.showWarningMessage(`Git Wave: "${c.name}" and ${c.upstream} have diverged, so it can't be fast-forwarded. Check it out and pull to merge or rebase.`);
+      }
+    });
+  }
+
+  async setUpstream(name: string, current: string | undefined): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    const remoteBranches = await repo.remoteBranches();
+    type Pick = vscode.QuickPickItem & { upstream?: string };
+    const items: Pick[] = remoteBranches.map((rb) => ({ label: rb, upstream: rb, description: rb === current ? 'current' : undefined }));
+    // Matching name first, then the rest.
+    items.sort((a, b) => Number(b.label.endsWith(`/${name}`)) - Number(a.label.endsWith(`/${name}`)));
+    if (current) items.push({ label: '', kind: vscode.QuickPickItemKind.Separator }, { label: '$(close) Unset Upstream', description: current });
+    const pick = await vscode.window.showQuickPick<Pick>(items, { title: `Upstream for ${name}`, placeHolder: remoteBranches.length ? 'Remote branch to track' : 'No remote branches. Fetch or push first.' });
+    if (!pick) return;
+    await this.guard(`Set upstream of ${name}`, (r) => r.setUpstream(name, pick.upstream));
+  }
+
+  /** Opens the host's "new pull request" page for a local branch (pushing it first if needed) or a remote branch. */
+  async createPullRequest(c: GraphContext): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo || !c.name) return;
+    let ref = c.webviewSection === 'remote' ? c.name : c.hasUpstream ? c.upstream : undefined;
+    if (!ref) {
+      const ok = await vscode.window.showInformationMessage(`"${c.name}" isn't on a remote yet.`, { modal: true, detail: 'Push it (and set its upstream) before opening a pull request?' }, 'Push');
+      if (!ok || !(await this.pushBranch(c.name, undefined))) return;
+      ref = (await repo.branchTracking()).get(c.name)?.upstream;
+      if (!ref) return;
+    }
+    const split = await repo.splitRemoteRef(ref);
+    if (!split) { void vscode.window.showErrorMessage(`Git Wave: no remote found for "${ref}".`); return; }
+    const url = pullRequestUrl(await repo.remoteUrl(split.remote), split.branch);
+    if (!url) { void vscode.window.showErrorMessage(`Git Wave: don't know how to open a pull request for remote "${split.remote}" (GitHub, GitLab and Bitbucket are supported).`); return; }
+    await vscode.env.openExternal(vscode.Uri.parse(url, true));
   }
 
   async renameBranch(name: string): Promise<void> {
@@ -197,6 +292,60 @@ export class CommitActions {
     const ok = await vscode.window.showWarningMessage(`Delete tag "${name}"?`, { modal: true }, 'Delete');
     if (!ok) return;
     await this.guard(`Delete tag ${name}`, (r) => r.deleteTag(name));
+  }
+
+  async deleteRemoteTag(name: string): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    const remote = await this.pickRemote(repo, `Delete tag ${name} from`);
+    if (!remote) return;
+    const ok = await vscode.window.showWarningMessage(
+      `Delete tag "${name}" on remote "${remote}"?`,
+      { modal: true, detail: `This runs "git push ${remote} --delete refs/tags/${name}" and removes the tag for everyone using ${remote}. Your local tag is kept.` },
+      'Delete Remote Tag',
+    );
+    if (!ok) return;
+    await this.guard(`Delete tag ${name} on ${remote}`, async (r) => {
+      try { await r.deleteRemoteTag(remote, name); }
+      catch (e) {
+        if (/remote ref does not exist/i.test(String(e))) void vscode.window.showInformationMessage(`Git Wave: tag "${name}" isn't on ${remote}.`);
+        else throw e;
+      }
+    });
+  }
+
+  // ---------- working tree ----------
+
+  async stashChanges(): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    const message = await vscode.window.showInputBox({ prompt: 'Stash message (optional)', placeHolder: 'WIP' });
+    if (message === undefined) return;
+    const hasUntracked = (await repo.status()).some((f) => f.status === '?');
+    let includeUntracked = false;
+    if (hasUntracked) {
+      const pick = await vscode.window.showQuickPick(['Include untracked files', 'Tracked changes only'], { title: 'Stash' });
+      if (!pick) return;
+      includeUntracked = pick === 'Include untracked files';
+    }
+    await this.guard('Stash changes', (r) => r.stashPush(message.trim() || undefined, includeUntracked));
+  }
+
+  async discardChanges(): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    const files = await repo.status();
+    const untracked = files.filter((f) => f.status === '?').length;
+    const tracked = files.length - untracked;
+    const options = [tracked ? 'Discard Changes' : '', untracked ? (tracked ? 'Discard Including Untracked' : 'Delete Untracked Files') : ''].filter(Boolean);
+    if (!options.length) return;
+    const pick = await vscode.window.showWarningMessage(
+      'Discard uncommitted changes? This cannot be undone.',
+      { modal: true, detail: [tracked ? `${tracked} changed file(s) will be reset to HEAD.` : '', untracked ? `${untracked} untracked file(s) ${tracked ? 'are kept unless you choose "Discard Including Untracked"' : 'will be deleted'}.` : ''].filter(Boolean).join('\n') },
+      ...options,
+    );
+    if (!pick) return;
+    await this.guard('Discard changes', (r) => r.discardChanges(pick !== 'Discard Changes'));
   }
 
   // ---------- stashes ----------

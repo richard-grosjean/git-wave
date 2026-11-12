@@ -2,9 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { git } from './exec';
-import { LOG_FORMAT, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
+import { LOG_FORMAT, parseBranchTracking, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
-import type { Commit, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
+import type { BranchTracking, Commit, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
 
 export interface LogOptions {
   skip: number;
@@ -152,6 +152,25 @@ export class Repository implements vscode.Disposable {
     return stdout.split('\n').map((s) => s.trim()).filter(Boolean);
   }
 
+  /** Local branches with their upstream and ahead/behind counts (relative to the last fetch). */
+  async branchTracking(): Promise<Map<string, BranchTracking>> {
+    const { stdout } = await git(this.root, ['for-each-ref', '--format=%(refname:short)%00%(upstream:short)%00%(upstream:track,nobracket)', 'refs/heads/']);
+    return parseBranchTracking(stdout);
+  }
+
+  async remoteBranches(): Promise<string[]> {
+    const { stdout } = await git(this.root, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes/']);
+    const remotes = await this.remotes();
+    // Skip `origin/HEAD` and bare `origin` (how a symbolic remote HEAD can show up).
+    return stdout.split('\n').map((s) => s.trim()).filter((s) => s && !remotes.includes(s) && !s.endsWith('/HEAD'));
+  }
+
+  /** Splits `origin/feat/x` into its configured remote and branch; remote names may contain `/`. */
+  async splitRemoteRef(remoteBranch: string): Promise<{ remote: string; branch: string } | undefined> {
+    const remote = [...await this.remotes()].sort((a, b) => b.length - a.length).find((r) => remoteBranch.startsWith(`${r}/`));
+    return remote ? { remote, branch: remoteBranch.slice(remote.length + 1) } : undefined;
+  }
+
   // ---------- working tree / stashes ----------
 
   async headHash(): Promise<string | undefined> {
@@ -173,11 +192,31 @@ export class Repository implements vscode.Disposable {
     if (this.nestedWorktrees === undefined) await this.worktrees().catch(() => undefined);
     // Worktrees checked out inside this tree are untracked from git's point of view, but they are
     // not "our" changes; exclude them so the uncommitted row only shows this worktree's files.
-    const exclude = (this.nestedWorktrees ?? []).map((n) => `:(exclude)${n.split(path.sep).join('/')}`);
-    const args = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
-    if (exclude.length) args.push('--', '.', ...exclude);
+    const args = ['status', '--porcelain=v1', '-z', '--untracked-files=all', ...this.nestedWorktreeExcludes()];
     const { stdout } = await git(this.root, args);
     return parseStatusZ(stdout);
+  }
+
+  /** Pathspec (`-- . :(exclude)…`) leaving out linked worktrees nested in this tree; empty when there are none. */
+  private nestedWorktreeExcludes(): string[] {
+    const exclude = (this.nestedWorktrees ?? []).map((n) => `:(exclude)${n.split(path.sep).join('/')}`);
+    return exclude.length ? ['--', '.', ...exclude] : [];
+  }
+
+  stashPush(message: string | undefined, includeUntracked: boolean): Promise<unknown> {
+    const args = ['stash', 'push'];
+    if (includeUntracked) args.push('--include-untracked');
+    if (message) args.push('-m', message);
+    return git(this.root, [...args, ...this.nestedWorktreeExcludes()]);
+  }
+
+  /** Discards changes to tracked files (`reset --hard`), and with `untracked` also removes untracked files (`clean -fd`). */
+  async discardChanges(untracked: boolean): Promise<void> {
+    await git(this.root, ['reset', '--hard', 'HEAD']);
+    if (untracked) {
+      if (this.nestedWorktrees === undefined) await this.worktrees();
+      await git(this.root, ['clean', '-fd', ...this.nestedWorktreeExcludes()]);
+    }
   }
 
   async stashes(): Promise<Stash[]> {
@@ -207,6 +246,23 @@ export class Repository implements vscode.Disposable {
   deleteBranch(name: string, force: boolean): Promise<unknown> { return git(this.root, ['branch', force ? '-D' : '-d', name]); }
   /** Deletes `branch` on `remote` (`git push <remote> --delete <branch>`). */
   deleteRemoteBranch(remote: string, branch: string): Promise<unknown> { return git(this.root, ['push', remote, '--delete', branch]); }
+  deleteRemoteTag(remote: string, tag: string): Promise<unknown> { return git(this.root, ['push', remote, '--delete', `refs/tags/${tag}`]); }
+  /** Pushes `branch` to `remote` as `remoteBranch`; `setUpstream` adds `-u`, `force` uses `--force-with-lease`. */
+  push(branch: string, remote: string, remoteBranch: string, o: { setUpstream?: boolean; force?: boolean } = {}): Promise<unknown> {
+    const args = ['push'];
+    if (o.setUpstream) args.push('-u');
+    if (o.force) args.push('--force-with-lease');
+    return git(this.root, [...args, remote, `refs/heads/${branch}:refs/heads/${remoteBranch}`]);
+  }
+  /** `git pull` in a working tree (this one by default). */
+  pull(cwd = this.root): Promise<unknown> { return git(cwd, ['pull']); }
+  /** Fast-forwards a branch that isn't checked out from its upstream (`git fetch <remote> <rb>:<branch>`). */
+  fastForward(branch: string, remote: string, remoteBranch: string): Promise<unknown> {
+    return git(this.root, ['fetch', remote, `refs/heads/${remoteBranch}:refs/heads/${branch}`]);
+  }
+  setUpstream(branch: string, upstream: string | undefined): Promise<unknown> {
+    return git(this.root, upstream ? ['branch', `--set-upstream-to=${upstream}`, branch] : ['branch', '--unset-upstream', branch]);
+  }
   /** Drops the local remote-tracking ref only (`git branch -dr <remote>/<branch>`). */
   deleteRemoteTrackingRef(remoteBranch: string): Promise<unknown> { return git(this.root, ['branch', '-dr', remoteBranch]); }
   renameBranch(from: string, to: string): Promise<unknown> { return git(this.root, ['branch', '-m', from, to]); }

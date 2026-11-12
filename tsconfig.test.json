@@ -12,5 +12,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src/graph", "src/git/parse.ts", "src/git/worktree-parse.ts", "src/avatars.ts", "src/shared", "test"]
+  "include": ["src/graph", "src/git/parse.ts", "src/git/worktree-parse.ts", "src/git/remote-url.ts", "src/avatars.ts", "src/shared", "test"]
 }

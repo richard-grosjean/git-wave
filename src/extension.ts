@@ -95,6 +95,13 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   reg('gitwave.branch.createFrom', (c: GraphContext) => c.name && commitActions.createBranch(c.name, label(c)));
   reg('gitwave.branch.rename', (c: GraphContext) => c.name && commitActions.renameBranch(c.name));
   reg('gitwave.branch.delete', (c: GraphContext) => c.name && commitActions.deleteBranch(c.name));
+  reg('gitwave.branch.push', (c: GraphContext) => c.name && commitActions.pushBranch(c.name, c.hasUpstream ? c.upstream : undefined));
+  reg('gitwave.branch.pull', (c: GraphContext) => commitActions.pullBranch(c));
+  reg('gitwave.branch.setUpstream', (c: GraphContext) => c.name && commitActions.setUpstream(c.name, c.upstream));
+  reg('gitwave.branch.createPullRequest', (c: GraphContext) => commitActions.createPullRequest(c));
+  reg('gitwave.tag.deleteRemote', (c: GraphContext) => c.name && commitActions.deleteRemoteTag(c.name));
+  reg('gitwave.uncommitted.stash', () => commitActions.stashChanges());
+  reg('gitwave.uncommitted.discard', () => commitActions.discardChanges());
   reg('gitwave.remote.delete', (c: GraphContext) => c.name && commitActions.deleteRemoteBranch(c.name));
   reg('gitwave.branch.copyName', (c: GraphContext) => c.name && vscode.env.clipboard.writeText(c.name));
   reg('gitwave.tag.checkout', (c: GraphContext) => c.name && commitActions.checkoutCommit(c.name));

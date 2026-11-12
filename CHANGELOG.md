@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- New right-click item on remote branches in the graph: **Delete Remote Branch…** (`git push <remote> --delete <branch>`, after a confirmation). If the branch is already gone on the remote, the stale remote-tracking ref is removed instead.
+- New right-click items on branches: **Push Branch** (sets the upstream on first push; if the push is rejected, offers a `--force-with-lease` push), **Pull Branch** (pulls when the branch is checked out here or in another worktree, otherwise fast-forwards it), **Set Upstream…** and **Create Pull Request…** (opens the host's new-PR page for GitHub, GitLab or Bitbucket; pushes the branch first if it isn't on a remote yet). Create Pull Request is also on remote branches.
+- Branch tags show ahead/behind counts against their upstream (`↑2 ↓1`, `⊘` when the upstream is gone). Hover for details.
+- **Delete Remote Branch…** on remote branches (`git push <remote> --delete <branch>`, after a confirmation). If the branch is already gone on the remote, the stale remote-tracking ref is removed instead.
+- **Delete Tag from Remote…** on tags, after a confirmation. The local tag is kept.
+- Right-click the uncommitted changes row to **Stash Changes…** (optional message, optionally including untracked files) or **Discard Changes…** (tracked only, or including untracked files).
+- Fix: git no longer waits forever on a username/password prompt it can't show. Fetch and push now fail straight away with a hint to set up a credential helper or SSH key.
 
 ## 0.4.0 (2026-11-12)
 

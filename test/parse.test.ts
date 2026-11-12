@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { parseDecorations, parseLog, parseNameStatusZ, parseRepoPaths, FIELD_SEP, RECORD_SEP } from '../src/git/parse.js';
+import { parseBranchTracking, parseDecorations, parseLog, parseNameStatusZ, parseRepoPaths, FIELD_SEP, RECORD_SEP } from '../src/git/parse.js';
 import { parseWorktreeList } from '../src/git/worktree-parse.js';
 
 test('parseDecorations classifies refs', () => {
@@ -87,4 +87,12 @@ test('parseRepoPaths resolves a relative common dir against the cwd, not the git
   assert.deepEqual(parseRepoPaths('/w/wt', '/w/wt\n/w/site/.git/worktrees/wt\n/w/site/.git\n', resolve, isAbs),
     { root: '/w/wt', gitDir: '/w/site/.git/worktrees/wt', commonDir: '/w/site/.git' });
   assert.equal(parseRepoPaths('/w', '\n', resolve, isAbs), undefined);
+});
+
+test('parseBranchTracking reads upstream and ahead/behind', () => {
+  const t = parseBranchTracking('main\0origin/main\0ahead 2, behind 1\nfeat\0origin/feat\0gone\nlocal\0\0\nsync\0origin/sync\0\n');
+  assert.deepEqual(t.get('main'), { upstream: 'origin/main', ahead: 2, behind: 1 });
+  assert.deepEqual(t.get('feat'), { upstream: 'origin/feat', gone: true });
+  assert.deepEqual(t.get('local'), {});
+  assert.deepEqual(t.get('sync'), { upstream: 'origin/sync' });
 });

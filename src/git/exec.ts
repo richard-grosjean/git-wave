@@ -18,7 +18,9 @@ export function git(cwd: string, args: string[], opts: { token?: vscode.Cancella
   return new Promise((resolve, reject) => {
     const child = spawn(gitPath, args, {
       cwd,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C.UTF-8' },
+      // GIT_TERMINAL_PROMPT=0: there is no terminal to answer a username/password prompt, so fail fast
+      // instead of hanging. Credential helpers and SSH agents still work.
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C.UTF-8' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const out: Buffer[] = [];
@@ -32,7 +34,11 @@ export function git(cwd: string, args: string[], opts: { token?: vscode.Cancella
       const stdout = Buffer.concat(out).toString('utf8');
       const stderr = Buffer.concat(err).toString('utf8');
       if (code === 0) resolve({ stdout, stderr });
-      else reject(new GitError(stderr.trim() || `git ${args[0]} exited with ${code}`, args, code, stderr));
+      else {
+        let msg = stderr.trim() || `git ${args[0]} exited with ${code}`;
+        if (/terminal prompts disabled/i.test(stderr)) msg += '\nGit needs credentials for this remote. Set up a credential helper or an SSH key; Git Wave can\'t answer password prompts.';
+        reject(new GitError(msg, args, code, stderr));
+      }
     });
   });
 }

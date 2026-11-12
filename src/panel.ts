@@ -6,7 +6,7 @@ import type { Repository } from './git/repository';
 import { foldStashes } from './git/parse';
 import { shortBranch } from './git/worktree-parse';
 import { GraphLayout } from './graph/layout';
-import { UNCOMMITTED, type Commit, type CommitFile, type GraphConfig, type HostMessage, type Stash, type WebviewMessage, type Worktree } from './shared/types';
+import { UNCOMMITTED, type BranchTracking, type Commit, type CommitFile, type GraphConfig, type HostMessage, type Stash, type WebviewMessage, type Worktree } from './shared/types';
 import { isCurrentWorktree, type WorktreeActions } from './worktreeCommands';
 
 /** Cap on how many already-loaded commits a background reload refetches at once. */
@@ -29,6 +29,7 @@ export class GraphPanel implements vscode.Disposable {
   private worktrees: Worktree[] = [];
   private stashes: Stash[] = [];
   private statusFiles: CommitFile[] = [];
+  private tracking = new Map<string, BranchTracking>();
   private repoSubs: vscode.Disposable[] = [];
 
   static show(ctx: vscode.ExtensionContext, repos: Repository[], actions: WorktreeActions, avatars: AvatarService, preferred?: Repository): GraphPanel {
@@ -213,7 +214,7 @@ export class GraphPanel implements vscode.Disposable {
     if (!opts.quiet) this.post({ type: 'loading', loading: true });
     try {
       if (first) {
-        [this.stashes, this.statusFiles] = await Promise.all([repo.stashes(), repo.status()]);
+        [this.stashes, this.statusFiles, this.tracking] = await Promise.all([repo.stashes(), repo.status(), repo.branchTracking().catch(() => new Map())]);
       }
       const { commits: raw, hasMore } = await repo.log({
         skip: this.loaded,
@@ -244,11 +245,13 @@ export class GraphPanel implements vscode.Disposable {
     }
   }
 
-  /** Attach stash refs to their commits. */
+  /** Attach stash refs to their commits, and upstream tracking to local branches. */
   private decorate(commits: Commit[]): Commit[] {
-    if (this.stashes.length === 0) return commits;
     const byHash = new Map(this.stashes.map((s) => [s.hash, s]));
     for (const c of commits) {
+      for (const r of c.refs) {
+        if (r.kind === 'branch') { const t = this.tracking.get(r.name); if (t) r.tracking = t; }
+      }
       const s = byHash.get(c.hash);
       if (s) c.refs = [{ kind: 'stash', name: `stash@{${s.index}}` }, ...c.refs];
     }

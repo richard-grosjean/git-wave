@@ -12,6 +12,17 @@ export interface Ref {
   name: string;
   /** True for the branch HEAD points at, or for a detached HEAD pseudo-ref. */
   isHead?: boolean;
+  /** Local branches only: upstream tracking state. */
+  tracking?: BranchTracking;
+}
+
+/** A local branch's upstream, e.g. `origin/main`, and how far apart they are as of the last fetch. */
+export interface BranchTracking {
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  /** The upstream is configured but no longer exists (deleted on the remote and pruned). */
+  gone?: boolean;
 }
 
 export interface Commit {

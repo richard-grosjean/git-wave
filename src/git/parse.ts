@@ -1,4 +1,4 @@
-import type { Commit, Ref } from '../shared/types';
+import type { BranchTracking, Commit, Ref } from '../shared/types';
 
 export const RECORD_SEP = '\x1e';
 export const FIELD_SEP = '\x1f';
@@ -149,4 +149,25 @@ export function parseRepoPaths(cwd: string, stdout: string, resolve: (...p: stri
   if (!root || !gitDir) return undefined;
   const commonDir = common && isAbsolute(common) ? common : resolve(cwd, common || gitDir);
   return { root, gitDir, commonDir };
+}
+
+/**
+ * Parses `for-each-ref --format=%(refname:short)%00%(upstream:short)%00%(upstream:track,nobracket)` output.
+ * Track is e.g. `ahead 2, behind 1`, `behind 3`, `gone`, or empty when in sync.
+ */
+export function parseBranchTracking(stdout: string): Map<string, BranchTracking> {
+  const out = new Map<string, BranchTracking>();
+  for (const line of stdout.split('\n')) {
+    const [name, upstream, track] = line.split('\0');
+    if (!name) continue;
+    const t: BranchTracking = {};
+    if (upstream) t.upstream = upstream;
+    if (track === 'gone') t.gone = true;
+    const ahead = /ahead (\d+)/.exec(track ?? '');
+    const behind = /behind (\d+)/.exec(track ?? '');
+    if (ahead) t.ahead = Number(ahead[1]);
+    if (behind) t.behind = Number(behind[1]);
+    out.set(name, t);
+  }
+  return out;
 }

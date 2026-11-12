@@ -291,8 +291,26 @@ function refChip(c: Commit, r: Commit['refs'][number], color: string, label = r.
     ctx.stashIndex = m ? Number(m[1]) : 0;
   }
   chip.title = r.kind === 'remote' ? `Remote branch ${r.name}` : r.kind === 'tag' ? `Tag ${r.name}` : r.kind === 'stash' ? `Stash ${r.name}` : `Branch ${r.name}${r.isHead ? ' (HEAD)' : ''}`;
+  const t = r.kind === 'branch' ? r.tracking : undefined;
+  if (t?.upstream) {
+    ctx.upstream = t.upstream;
+    ctx.hasUpstream = !t.gone;
+    chip.title += t.gone ? `\nUpstream ${t.upstream} is gone` : `\nTracks ${t.upstream}${trackSummary(t)}`;
+    const marks = [t.ahead ? `↑${t.ahead}` : '', t.behind ? `↓${t.behind}` : '', t.gone ? '⊘' : ''].filter(Boolean).join(' ');
+    if (marks) {
+      const m = document.createElement('span');
+      m.className = 'track';
+      m.textContent = marks;
+      chip.append(m);
+    }
+  }
   chip.dataset.vscodeContext = JSON.stringify(ctx);
   return chip;
+}
+
+function trackSummary(t: { ahead?: number; behind?: number }): string {
+  const parts = [t.ahead ? `${t.ahead} ahead` : '', t.behind ? `${t.behind} behind` : ''].filter(Boolean);
+  return parts.length ? ` (${parts.join(', ')})` : ' (up to date)';
 }
 
 /**
