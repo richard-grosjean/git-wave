@@ -8,6 +8,10 @@
 - **Delete Tag from Remote…** on tags, after a confirmation. The local tag is kept.
 - Right-click the uncommitted changes row to **Stash Changes…** (optional message, optionally including untracked files) or **Discard Changes…** (tracked only, or including untracked files).
 - Fix: git no longer waits forever on a username/password prompt it can't show. Fetch and push now fail straight away with a hint to set up a credential helper or SSH key.
+- A merge, rebase, cherry-pick or revert that stops part-way now shows a banner above the graph: what's in progress (with rebase progress, e.g. `3/7`), how many files are still conflicted, and **Continue**, **Skip**, **Abort** and **Source Control** buttons. Continue keeps git's prepared commit message instead of opening an editor; Abort asks first.
+- Fix: adding or renaming a remote while VS Code is open no longer makes its branches show up as local branches. Remotes are re-read when `.git/config` changes.
+- Fix: remote names containing `/` (e.g. `team/origin`) now split correctly, so their branches join the matching local branch tag.
+- Fix: GitHub avatars work when the GitHub remote isn't called `origin`. The first GitHub remote is used.
 
 ## 0.4.0 (2026-11-12)
 

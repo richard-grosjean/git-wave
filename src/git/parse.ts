@@ -42,10 +42,10 @@ export function parseDecorations(d: string, remotes: readonly string[]): Ref[] {
       refs.push({ kind: 'branch', name: item.slice(8), isHead: true });
     } else if (item.startsWith('tag: ')) {
       refs.push({ kind: 'tag', name: item.slice(5) });
-    } else if (item.endsWith('/HEAD') && isRemoteRef(item, remotes)) {
+    } else if (item.endsWith('/HEAD') && remoteOf(item, remotes)) {
       continue; // origin/HEAD is noise
-    } else if (isRemoteRef(item, remotes)) {
-      refs.push({ kind: 'remote', name: item });
+    } else if (remoteOf(item, remotes)) {
+      refs.push({ kind: 'remote', name: item, remote: remoteOf(item, remotes) });
     } else {
       refs.push({ kind: 'branch', name: item });
     }
@@ -53,11 +53,13 @@ export function parseDecorations(d: string, remotes: readonly string[]): Ref[] {
   return refs;
 }
 
-function isRemoteRef(name: string, remotes: readonly string[]): boolean {
+/** The remote a ref like `origin/main` belongs to; the longest match wins, since remote names may contain `/`. */
+function remoteOf(name: string, remotes: readonly string[]): string | undefined {
+  let best: string | undefined;
   for (const r of remotes) {
-    if (name.startsWith(r + '/')) return true;
+    if (name.startsWith(r + '/') && r.length > (best?.length ?? -1)) best = r;
   }
-  return false;
+  return best;
 }
 
 export interface NameStatusEntry {

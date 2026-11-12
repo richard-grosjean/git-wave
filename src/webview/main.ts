@@ -1,4 +1,4 @@
-import { UNCOMMITTED, type Commit, type CommitDetail, type CommitFile, type Edge, type GraphConfig, type HostMessage, type Row, type WebviewMessage, type Worktree } from '../shared/types';
+import { UNCOMMITTED, type Commit, type CommitDetail, type CommitFile, type Edge, type GraphConfig, type HostMessage, type OperationAction, type OperationState, type Ref, type Row, type WebviewMessage, type Worktree } from '../shared/types';
 
 declare function acquireVsCodeApi(): { postMessage(m: WebviewMessage): void; getState(): unknown; setState(s: unknown): void };
 const vscode = acquireVsCodeApi();
@@ -39,6 +39,15 @@ app.innerHTML = `
     <span id="spinner" class="codicon codicon-loading codicon-modifier-spin" hidden></span>
     <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span></button>
     <button id="refresh" class="icon-btn" title="Refresh"><span class="codicon codicon-refresh"></span></button>
+  </div>
+  <div id="opbar" hidden>
+    <span class="codicon codicon-warning"></span><span id="op-text"></span>
+    <span class="op-actions">
+      <button data-op="continue" class="op-btn primary">Continue</button>
+      <button data-op="skip" class="op-btn">Skip</button>
+      <button data-op="abort" class="op-btn">Abort</button>
+      <button data-op="scm" class="op-btn" title="Resolve conflicts in Source Control">Source Control</button>
+    </span>
   </div>
   <div id="header">
     <div class="c-graph">Graph</div><div class="c-desc">Description</div>
@@ -225,10 +234,11 @@ function hashHue(s: string): number {
   return Math.abs(h) % 360;
 }
 
-/** Splits `origin/feat/x` into remote `origin` and branch `feat/x`. */
-function splitRemote(name: string): { remote: string; branch: string } {
-  const i = name.indexOf('/');
-  return i < 0 ? { remote: name, branch: '' } : { remote: name.slice(0, i), branch: name.slice(i + 1) };
+/** Splits `origin/feat/x` into remote `origin` and branch `feat/x`, using the remote the host matched. */
+function splitRemote(r: Ref): { remote: string; branch: string } {
+  if (r.remote && r.name.startsWith(`${r.remote}/`)) return { remote: r.remote, branch: r.name.slice(r.remote.length + 1) };
+  const i = r.name.indexOf('/');
+  return i < 0 ? { remote: r.name, branch: '' } : { remote: r.name.slice(0, i), branch: r.name.slice(i + 1) };
 }
 
 /**
@@ -239,7 +249,7 @@ function splitRemote(name: string): { remote: string; branch: string } {
 function refChips(c: Commit, color: string): HTMLElement[] {
   const out: HTMLElement[] = [];
   const locals = new Set(c.refs.filter((r) => r.kind === 'branch').map((r) => r.name));
-  const joinedRemotes = new Set(c.refs.filter((r) => r.kind === 'remote' && locals.has(splitRemote(r.name).branch)).map((r) => r.name));
+  const joinedRemotes = new Set(c.refs.filter((r) => r.kind === 'remote' && locals.has(splitRemote(r).branch)).map((r) => r.name));
   const shownWorktrees = new Set<string>();
   for (const r of c.refs) {
     if (joinedRemotes.has(r.name)) continue;
@@ -247,8 +257,8 @@ function refChips(c: Commit, color: string): HTMLElement[] {
     if (r.kind !== 'branch') { out.push(chip); continue; }
     const segments = [chip];
     for (const rr of c.refs) {
-      if (rr.kind === 'remote' && joinedRemotes.has(rr.name) && splitRemote(rr.name).branch === r.name) {
-        segments.push(refChip(c, rr, color, splitRemote(rr.name).remote));
+      if (rr.kind === 'remote' && joinedRemotes.has(rr.name) && splitRemote(rr).branch === r.name) {
+        segments.push(refChip(c, rr, color, splitRemote(rr).remote));
       }
     }
     const wt = worktreesByBranch.get(r.name);
@@ -306,6 +316,19 @@ function refChip(c: Commit, r: Commit['refs'][number], color: string, label = r.
   }
   chip.dataset.vscodeContext = JSON.stringify(ctx);
   return chip;
+}
+
+function renderOperation(op: OperationState | undefined): void {
+  const bar = $('opbar');
+  bar.hidden = !op;
+  if (!op) return;
+  const what = op.kind === 'rebase'
+    ? `Rebasing${op.branch ? ` ${op.branch}` : ''}${op.step && op.total ? ` (${op.step}/${op.total})` : ''}`
+    : `${op.kind === 'cherry-pick' ? 'Cherry-pick' : op.kind[0]!.toUpperCase() + op.kind.slice(1)} in progress`;
+  $('op-text').textContent = `${what}: ${op.conflicts ? `${op.conflicts} conflicted file${op.conflicts === 1 ? '' : 's'}` : 'conflicts resolved, ready to continue'}`;
+  bar.classList.toggle('resolved', op.conflicts === 0);
+  // Merges can't skip a commit.
+  bar.querySelector<HTMLElement>('[data-op="skip"]')!.hidden = op.kind === 'merge';
 }
 
 function trackSummary(t: { ahead?: number; behind?: number }): string {
@@ -578,6 +601,9 @@ rowsEl.addEventListener('contextmenu', (e) => {
   const row = (e.target as HTMLElement).closest<HTMLElement>('.row');
   if (row?.dataset.hash && row.dataset.hash !== selected) select(row.dataset.hash);
 });
+for (const b of document.querySelectorAll<HTMLButtonElement>('#opbar [data-op]')) {
+  b.onclick = () => post({ type: 'operation', action: b.dataset.op as OperationAction });
+}
 $('detail-close').onclick = () => select(null);
 $('detail-hash').onclick = () => { if (selected && selected !== UNCOMMITTED) post({ type: 'copy', text: selected }); };
 $('refresh').onclick = () => post({ type: 'refresh' });
@@ -672,6 +698,9 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       break;
     case 'detail':
       showDetail(m.detail);
+      break;
+    case 'operation':
+      renderOperation(m.op);
       break;
     case 'loading':
       loading = m.loading;

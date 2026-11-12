@@ -12,6 +12,8 @@ export interface Ref {
   name: string;
   /** True for the branch HEAD points at, or for a detached HEAD pseudo-ref. */
   isHead?: boolean;
+  /** Remote branches only: the configured remote, e.g. `origin` (remote names may contain `/`). */
+  remote?: string;
   /** Local branches only: upstream tracking state. */
   tracking?: BranchTracking;
 }
@@ -86,6 +88,21 @@ export interface CommitDetail {
   files: CommitFile[];
 }
 
+export type OperationKind = 'merge' | 'rebase' | 'cherry-pick' | 'revert';
+export type OperationAction = 'continue' | 'skip' | 'abort' | 'scm';
+
+/** A merge, rebase, cherry-pick or revert that stopped part-way (usually on conflicts). */
+export interface OperationState {
+  kind: OperationKind;
+  /** Files still unmerged. */
+  conflicts: number;
+  /** Rebase progress: current step and total. */
+  step?: number;
+  total?: number;
+  /** Rebase: the branch being rebased. */
+  branch?: string;
+}
+
 export interface GraphConfig {
   laneWidth: number;
   rowHeight: number;
@@ -107,6 +124,7 @@ export type HostMessage =
   | { type: 'status'; files: CommitFile[] }
   | { type: 'loading'; loading: boolean }
   | { type: 'reveal'; hash: string }
+  | { type: 'operation'; op: OperationState | undefined }
   | { type: 'error'; message: string };
 
 // ---- Messages: webview -> host ----
@@ -121,4 +139,5 @@ export type WebviewMessage =
   | { type: 'select'; hash: string }
   | { type: 'openFile'; hash: string; path: string; status: string; oldPath?: string }
   | { type: 'copy'; text: string }
-  | { type: 'worktree'; path: string; action: WorktreeAction };
+  | { type: 'worktree'; path: string; action: WorktreeAction }
+  | { type: 'operation'; action: OperationAction };

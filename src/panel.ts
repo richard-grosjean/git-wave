@@ -140,6 +140,9 @@ export class GraphPanel implements vscode.Disposable {
       case 'copy':
         await vscode.env.clipboard.writeText(m.text);
         return;
+      case 'operation':
+        await vscode.commands.executeCommand('gitwave.operation', m.action);
+        break;
       case 'worktree': {
         const wt = this.worktrees.find((w) => w.path === m.path);
         if (repo && wt) await this.actions.run(repo, wt, m.action);
@@ -178,9 +181,18 @@ export class GraphPanel implements vscode.Disposable {
     await Promise.all([this.loadPage(true, { quiet, minCount: keep }), this.loadWorktrees()]);
   }
 
+  /** Tell the webview about an in-progress merge/rebase/cherry-pick/revert (or that there is none). */
+  private async postOperation(): Promise<void> {
+    const repo = this.repo;
+    if (!repo) return;
+    const op = await repo.operationState().catch(() => undefined);
+    if (repo === this.repo) this.post({ type: 'operation', op });
+  }
+
   /** Re-check the working tree; reload the graph only if the uncommitted row would change. */
   private async refreshStatus(): Promise<void> {
     if (!this.repo) return;
+    void this.postOperation(); // conflict counts change as files are resolved and staged
     try {
       const files = await this.repo.status();
       const before = this.statusFiles;
@@ -215,6 +227,7 @@ export class GraphPanel implements vscode.Disposable {
     try {
       if (first) {
         [this.stashes, this.statusFiles, this.tracking] = await Promise.all([repo.stashes(), repo.status(), repo.branchTracking().catch(() => new Map())]);
+        void this.postOperation();
       }
       const { commits: raw, hasMore } = await repo.log({
         skip: this.loaded,
@@ -235,7 +248,7 @@ export class GraphPanel implements vscode.Disposable {
       this.hasMore = hasMore;
       this.post({ type: 'commits', repo: repo.root, commits, rows, tail: hasMore ? this.layout.tail() : [], append: !first, hasMore, maxLanes: this.layout.maxLanes });
       if (readConfig().avatars) {
-        const known = this.avatars.resolve(commits, await repo.remoteUrl(), (more) => { if (gen === this.generation) this.post({ type: 'avatars', avatars: more }); });
+        const known = this.avatars.resolve(commits, await repo.avatarRemoteUrl(), (more) => { if (gen === this.generation) this.post({ type: 'avatars', avatars: more }); });
         this.post({ type: 'avatars', avatars: known });
       }
     } catch (e) {

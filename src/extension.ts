@@ -4,6 +4,7 @@ import { setGitPath } from './git/exec';
 import { discoverRepositories, Repository } from './git/repository';
 import { AvatarService } from './avatars';
 import { CommitActions, type GraphContext } from './commitCommands';
+import type { OperationAction } from './shared/types';
 import { GraphPanel } from './panel';
 import { WorktreeActions } from './worktreeCommands';
 import { WorktreeItem, WorktreeProvider } from './worktreeView';
@@ -95,6 +96,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   reg('gitwave.branch.createFrom', (c: GraphContext) => c.name && commitActions.createBranch(c.name, label(c)));
   reg('gitwave.branch.rename', (c: GraphContext) => c.name && commitActions.renameBranch(c.name));
   reg('gitwave.branch.delete', (c: GraphContext) => c.name && commitActions.deleteBranch(c.name));
+  reg('gitwave.operation', (action: OperationAction) => commitActions.operation(action));
   reg('gitwave.branch.push', (c: GraphContext) => c.name && commitActions.pushBranch(c.name, c.hasUpstream ? c.upstream : undefined));
   reg('gitwave.branch.pull', (c: GraphContext) => commitActions.pullBranch(c));
   reg('gitwave.branch.setUpstream', (c: GraphContext) => c.name && commitActions.setUpstream(c.name, c.upstream));

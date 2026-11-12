@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { GitError } from './git/exec';
 import type { Repository } from './git/repository';
+import type { OperationAction } from './shared/types';
 import { pullRequestUrl } from './git/remote-url';
 import { shortBranch } from './git/worktree-parse';
 
@@ -346,6 +347,35 @@ export class CommitActions {
     );
     if (!pick) return;
     await this.guard('Discard changes', (r) => r.discardChanges(pick !== 'Discard Changes'));
+  }
+
+  // ---------- merge / rebase / cherry-pick / revert in progress ----------
+
+  async operation(action: OperationAction): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    if (action === 'scm') { await vscode.commands.executeCommand('workbench.view.scm'); return; }
+    const op = await repo.operationState();
+    if (!op) { this.refresh(); return; }
+    const name = op.kind === 'cherry-pick' ? 'Cherry-pick' : op.kind[0]!.toUpperCase() + op.kind.slice(1);
+    if (action === 'continue' && op.conflicts > 0) {
+      const pick = await vscode.window.showWarningMessage(
+        `${op.conflicts} file(s) still have conflicts.`,
+        { modal: true, detail: 'Resolve them and stage the result (e.g. "Complete Merge" in the merge editor, or Stage in Source Control), then continue.' },
+        'Open Source Control',
+      );
+      if (pick) await vscode.commands.executeCommand('workbench.view.scm');
+      return;
+    }
+    if (action === 'abort') {
+      const ok = await vscode.window.showWarningMessage(
+        `Abort the ${op.kind}?`,
+        { modal: true, detail: op.kind === 'rebase' ? `${op.branch ?? 'The branch'} goes back to where it was before the rebase. Conflict resolutions so far are lost.` : 'The working tree goes back to where it was before. Conflict resolutions so far are lost.' },
+        `Abort ${name}`,
+      );
+      if (!ok) return;
+    }
+    await this.guard(`${name} --${action}`, (r) => r.operation(op.kind, action));
   }
 
   // ---------- stashes ----------

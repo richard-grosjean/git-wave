@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { git } from './exec';
 import { LOG_FORMAT, parseBranchTracking, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
-import type { BranchTracking, Commit, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
+import type { BranchTracking, Commit, OperationKind, OperationState, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
 
 export interface LogOptions {
   skip: number;
@@ -291,6 +291,50 @@ export class Repository implements vscode.Disposable {
     return stdout.trim() || undefined;
   }
 
+  /** The merge / rebase / cherry-pick / revert in progress in this worktree, if any. */
+  async operationState(): Promise<OperationState | undefined> {
+    const at = (f: string) => path.join(this.gitDir, f);
+    const exists = (f: string) => fs.promises.access(at(f)).then(() => true, () => false);
+    const read = (f: string) => fs.promises.readFile(at(f), 'utf8').then((s) => s.trim(), () => '');
+    let op: OperationState | undefined;
+    for (const dir of ['rebase-merge', 'rebase-apply']) {
+      if (!(await exists(dir))) continue;
+      const merge = dir === 'rebase-merge';
+      // rebase-apply also backs `git am`; only treat it as a rebase when git says so.
+      if (!merge && !(await exists('rebase-apply/rebasing'))) continue;
+      const step = Number(await read(merge ? 'rebase-merge/msgnum' : 'rebase-apply/next')) || undefined;
+      const total = Number(await read(merge ? 'rebase-merge/end' : 'rebase-apply/last')) || undefined;
+      const branch = (await read(`${dir}/head-name`)).replace(/^refs\/heads\//, '') || undefined;
+      op = { kind: 'rebase', conflicts: 0, step, total, branch };
+      break;
+    }
+    if (!op) {
+      const heads: [string, OperationKind][] = [['MERGE_HEAD', 'merge'], ['CHERRY_PICK_HEAD', 'cherry-pick'], ['REVERT_HEAD', 'revert']];
+      for (const [file, kind] of heads) if (await exists(file)) { op = { kind, conflicts: 0 }; break; }
+    }
+    if (!op) return undefined;
+    const { stdout } = await git(this.root, ['diff', '--name-only', '--diff-filter=U']).catch(() => ({ stdout: '' }));
+    op.conflicts = stdout.split('\n').filter(Boolean).length;
+    return op;
+  }
+
+  /** `git <kind> --continue|--skip|--abort`; continue keeps git's prepared commit message instead of opening an editor. */
+  operation(kind: OperationKind, action: 'continue' | 'skip' | 'abort'): Promise<unknown> {
+    return git(this.root, [...(action === 'continue' ? ['-c', 'core.editor=true'] : []), kind, `--${action}`]);
+  }
+
+  /** URL of the first remote on GitHub (origin first), else origin's URL. Used for avatar lookups. */
+  async avatarRemoteUrl(): Promise<string | undefined> {
+    const remotes = [...await this.remotes()].sort((a, b) => (a === 'origin' ? -1 : b === 'origin' ? 1 : 0));
+    let first: string | undefined;
+    for (const r of remotes) {
+      const url = await this.remoteUrl(r);
+      first ??= url;
+      if (url && /github\.com[:/]/i.test(url)) return url;
+    }
+    return first;
+  }
+
   /** Watch the shared git dir (refs, HEAD, worktree metadata) and fire a debounced change event. */
   private watch(): void {
     try {
@@ -298,6 +342,8 @@ export class Repository implements vscode.Disposable {
         const f = typeof file === 'string' ? file : '';
         // Ignore index churn and our own lock files; refs/HEAD/packed-refs/worktrees are what matter.
         if (f.endsWith('.lock') || f.startsWith('objects')) return;
+        // Remotes live in config; re-read them so a new remote's branches aren't taken for local ones.
+        if (f === 'config') this.remoteNames = undefined;
         if (f === 'index' || f.endsWith('/index') || f.endsWith('\\index')) { this.fireWorkingTree(); return; }
         if (this.debounce) clearTimeout(this.debounce);
         this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
@@ -305,8 +351,12 @@ export class Repository implements vscode.Disposable {
       this.watcher.on('error', () => { /* best effort */ });
     } catch {
       // Recursive watch unsupported: fall back to a VS Code watcher on refs.
-      const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.commonDir, '{HEAD,packed-refs,refs/**,worktrees/**}'));
-      const fire = () => { if (this.debounce) clearTimeout(this.debounce); this.debounce = setTimeout(() => this._onDidChange.fire(), 300); };
+      const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.commonDir, '{HEAD,packed-refs,config,*_HEAD,refs/**,worktrees/**,rebase-merge/**,rebase-apply/**}'));
+      const fire = (u?: vscode.Uri) => {
+        if (u && path.basename(u.fsPath) === 'config') this.remoteNames = undefined;
+        if (this.debounce) clearTimeout(this.debounce);
+        this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
+      };
       w.onDidChange(fire); w.onDidCreate(fire); w.onDidDelete(fire);
       this.fallback = w;
     }

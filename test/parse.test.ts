@@ -8,13 +8,20 @@ test('parseDecorations classifies refs', () => {
   const refs = parseDecorations('HEAD -> main, origin/main, tag: v1.0, origin/HEAD, feature/x', ['origin']);
   assert.deepEqual(refs, [
     { kind: 'branch', name: 'main', isHead: true },
-    { kind: 'remote', name: 'origin/main' },
+    { kind: 'remote', name: 'origin/main', remote: 'origin' },
     { kind: 'tag', name: 'v1.0' },
     { kind: 'branch', name: 'feature/x' },
   ]);
   assert.deepEqual(parseDecorations('HEAD', []), [{ kind: 'head', name: 'HEAD', isHead: true }]);
   assert.deepEqual(parseDecorations('refs/stash, main', []), [{ kind: 'branch', name: 'main' }]);
   assert.deepEqual(parseDecorations('', []), []);
+});
+
+test('parseDecorations matches the longest remote name', () => {
+  assert.deepEqual(parseDecorations('team/origin/feat/x, team/y', ['team', 'team/origin']), [
+    { kind: 'remote', name: 'team/origin/feat/x', remote: 'team/origin' },
+    { kind: 'remote', name: 'team/y', remote: 'team' },
+  ]);
 });
 
 test('parseLog reads records', () => {
