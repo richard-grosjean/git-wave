@@ -205,6 +205,10 @@ export class Repository implements vscode.Disposable {
     return checkout ? git(this.root, ['checkout', '-b', name, at]) : git(this.root, ['branch', name, at]);
   }
   deleteBranch(name: string, force: boolean): Promise<unknown> { return git(this.root, ['branch', force ? '-D' : '-d', name]); }
+  /** Deletes `branch` on `remote` (`git push <remote> --delete <branch>`). */
+  deleteRemoteBranch(remote: string, branch: string): Promise<unknown> { return git(this.root, ['push', remote, '--delete', branch]); }
+  /** Drops the local remote-tracking ref only (`git branch -dr <remote>/<branch>`). */
+  deleteRemoteTrackingRef(remoteBranch: string): Promise<unknown> { return git(this.root, ['branch', '-dr', remoteBranch]); }
   renameBranch(from: string, to: string): Promise<unknown> { return git(this.root, ['branch', '-m', from, to]); }
   merge(ref: string, mode: 'default' | 'no-ff' | 'squash' | 'ff-only'): Promise<unknown> {
     const args = ['merge'];

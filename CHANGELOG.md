@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New right-click item on remote branches in the graph: **Delete Remote Branch…** (`git push <remote> --delete <branch>`, after a confirmation). If the branch is already gone on the remote, the stale remote-tracking ref is removed instead.
+
 ## 0.4.0 (2026-11-12)
 
 - Branches now render as one segmented tag with what belongs to them: `branch | origin | worktree | this window`. Remote branches at the same commit as their local branch fold into it as a remote segment (they stay separate when they've diverged). Worktrees get their own icon (codicons bumped to 0.0.45) and are only shown when the repo has more than one. Each segment keeps its own right-click menu.

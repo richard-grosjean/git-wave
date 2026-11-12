@@ -95,6 +95,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   reg('gitwave.branch.createFrom', (c: GraphContext) => c.name && commitActions.createBranch(c.name, label(c)));
   reg('gitwave.branch.rename', (c: GraphContext) => c.name && commitActions.renameBranch(c.name));
   reg('gitwave.branch.delete', (c: GraphContext) => c.name && commitActions.deleteBranch(c.name));
+  reg('gitwave.remote.delete', (c: GraphContext) => c.name && commitActions.deleteRemoteBranch(c.name));
   reg('gitwave.branch.copyName', (c: GraphContext) => c.name && vscode.env.clipboard.writeText(c.name));
   reg('gitwave.tag.checkout', (c: GraphContext) => c.name && commitActions.checkoutCommit(c.name));
   reg('gitwave.tag.delete', (c: GraphContext) => c.name && commitActions.deleteTag(c.name));

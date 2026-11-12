@@ -97,6 +97,30 @@ export class CommitActions {
     });
   }
 
+  async deleteRemoteBranch(remoteBranch: string): Promise<void> {
+    const repo = this.repoFor();
+    if (!repo) return;
+    // Remote names can contain '/', so match against the configured remotes, longest first.
+    const remote = [...await repo.remotes()].sort((a, b) => b.length - a.length).find((r) => remoteBranch.startsWith(`${r}/`));
+    if (!remote) { void vscode.window.showErrorMessage(`Git Wave: no remote found for "${remoteBranch}".`); return; }
+    const branch = remoteBranch.slice(remote.length + 1);
+    if (branch === 'HEAD') { void vscode.window.showErrorMessage(`Git Wave: "${remoteBranch}" is the remote's default-branch pointer and can't be deleted.`); return; }
+    const ok = await vscode.window.showWarningMessage(
+      `Delete branch "${branch}" on remote "${remote}"?`,
+      { modal: true, detail: `This runs "git push ${remote} --delete ${branch}" and removes the branch for everyone using ${remote}.` },
+      'Delete Remote Branch',
+    );
+    if (!ok) return;
+    await this.guard(`Delete ${remoteBranch}`, async (r) => {
+      try { await r.deleteRemoteBranch(remote, branch); }
+      catch (e) {
+        // Already gone on the remote: just drop the stale tracking ref so the chip disappears.
+        if (/remote ref does not exist/i.test(String(e))) await r.deleteRemoteTrackingRef(remoteBranch);
+        else throw e;
+      }
+    });
+  }
+
   async renameBranch(name: string): Promise<void> {
     const to = await vscode.window.showInputBox({ prompt: `Rename branch "${name}" to`, value: name, validateInput: validateRefName });
     if (!to || to === name) return;

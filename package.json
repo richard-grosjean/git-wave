@@ -205,6 +205,11 @@
         "category": "Git Wave"
       },
       {
+        "command": "gitwave.remote.delete",
+        "title": "Delete Remote Branch…",
+        "category": "Git Wave"
+      },
+      {
         "command": "gitwave.branch.copyName",
         "title": "Copy Branch Name",
         "category": "Git Wave"
@@ -495,6 +500,10 @@
           "when": "false"
         },
         {
+          "command": "gitwave.remote.delete",
+          "when": "false"
+        },
+        {
           "command": "gitwave.branch.copyName",
           "when": "false"
         },
@@ -647,6 +656,11 @@
           "command": "gitwave.branch.createFrom",
           "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
           "group": "1_nav@2"
+        },
+        {
+          "command": "gitwave.remote.delete",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "3_edit@1"
         },
         {
           "command": "gitwave.branch.copyName",
