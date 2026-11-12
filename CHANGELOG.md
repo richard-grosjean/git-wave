@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-12)
 
 - Branches now render as one segmented tag with what belongs to them: `branch | origin | worktree | this window`. Remote branches at the same commit as their local branch fold into it as a remote segment (they stay separate when they've diverged). Worktrees get their own icon (codicons bumped to 0.0.45) and are only shown when the repo has more than one. Each segment keeps its own right-click menu.
 - Worktree actions moved to the right-click menu on the tag. The folder-icon badge and its click-to-open quick pick are gone.
