@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-13)
 
 - New right-click items on branches: **Push Branch** (sets the upstream on first push; if the push is rejected, offers a `--force-with-lease` push), **Pull Branch** (pulls when the branch is checked out here or in another worktree, otherwise fast-forwards it), **Set Upstream…** and **Create Pull Request…** (opens the host's new-PR page for GitHub, GitLab or Bitbucket; pushes the branch first if it isn't on a remote yet). Create Pull Request is also on remote branches.
 - Branch tags show ahead/behind counts against their upstream (`↑2 ↓1`, `⊘` when the upstream is gone). Hover for details.
