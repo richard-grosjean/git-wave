@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 (2026-11-13)
+
+- 
+
 ## 0.5.1 (2026-11-13)
 
 - Fix: branches no longer drop out of the graph after a fetch, push or checkout. Overlapping background refreshes could reset the graph to its first page, hiding branches whose tips were further down until you scrolled again.
