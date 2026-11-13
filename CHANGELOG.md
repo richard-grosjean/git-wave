@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix: branches no longer drop out of the graph after a fetch, push or checkout. Overlapping background refreshes could reset the graph to its first page, hiding branches whose tips were further down until you scrolled again.
+- Fix: a `git remote` read that was still running when `.git/config` changed could cache the old remote list, so a new or renamed remote's branches showed as local branches.
+
 ## 0.5.0 (2026-11-13)
 
 - New right-click items on branches: **Push Branch** (sets the upstream on first push; if the push is rejected, offers a `--force-with-lease` push), **Pull Branch** (pulls when the branch is checked out here or in another worktree, otherwise fast-forwards it), **Set Upstream…** and **Create Pull Request…** (opens the host's new-PR page for GitHub, GitLab or Bitbucket; pushes the branch first if it isn't on a remote yet). Create Pull Request is also on remote branches.

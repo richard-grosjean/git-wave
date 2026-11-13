@@ -22,6 +22,9 @@ export class GraphPanel implements vscode.Disposable {
   private repo: Repository | undefined;
   private layout = new GraphLayout();
   private loaded = 0;
+  /** Commits the graph showed after the last completed load. Unlike `loaded`, a reload does not reset it, so
+   * overlapping reloads (watcher bursts during fetch/push) keep the user's scroll depth instead of dropping to one page. */
+  private depth = 0;
   private hasMore = false;
   private loading = false;
   private generation = 0;
@@ -84,6 +87,7 @@ export class GraphPanel implements vscode.Disposable {
   private switchRepo(repo: Repository): void {
     for (const s of this.repoSubs) s.dispose();
     this.repo = repo;
+    this.depth = 0;
     repo.watchWorkingTree();
     this.repoSubs = [
       repo.onDidChange(() => void this.reload(true)),
@@ -175,7 +179,7 @@ export class GraphPanel implements vscode.Disposable {
    */
   async reload(quiet = false): Promise<void> {
     this.layout = new GraphLayout(readConfig().colors.length);
-    const keep = Math.min(this.loaded, MAX_RELOAD_DEPTH);
+    const keep = Math.min(this.depth, MAX_RELOAD_DEPTH);
     this.loaded = 0;
     this.hasMore = false;
     await Promise.all([this.loadPage(true, { quiet, minCount: keep }), this.loadWorktrees()]);
@@ -245,6 +249,7 @@ export class GraphPanel implements vscode.Disposable {
       }
       const rows = commits.map((c) => this.layout.add(c));
       this.loaded += raw.length;
+      this.depth = this.loaded;
       this.hasMore = hasMore;
       this.post({ type: 'commits', repo: repo.root, commits, rows, tail: hasMore ? this.layout.tail() : [], append: !first, hasMore, maxLanes: this.layout.maxLanes });
       if (readConfig().avatars) {

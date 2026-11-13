@@ -28,6 +28,8 @@ export class Repository implements vscode.Disposable {
   private watcher: fs.FSWatcher | undefined;
   private debounce: NodeJS.Timeout | undefined;
   private remoteNames: string[] | undefined;
+  /** Bumped when config changes, so a `git remote` started before the change can't cache its stale answer. */
+  private remoteGen = 0;
   /** Linked worktrees that live inside this working tree, as relative paths (e.g. `.claude/worktrees/task`). */
   private nestedWorktrees: string[] | undefined;
 
@@ -51,11 +53,12 @@ export class Repository implements vscode.Disposable {
   }
 
   async remotes(): Promise<string[]> {
-    if (!this.remoteNames) {
-      const { stdout } = await git(this.root, ['remote']);
-      this.remoteNames = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
-    }
-    return this.remoteNames;
+    if (this.remoteNames) return this.remoteNames;
+    const gen = this.remoteGen;
+    const { stdout } = await git(this.root, ['remote']);
+    const names = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (gen === this.remoteGen) this.remoteNames = names;
+    return names;
   }
 
   async log(opts: LogOptions, token?: vscode.CancellationToken): Promise<{ commits: Commit[]; hasMore: boolean }> {
@@ -343,7 +346,7 @@ export class Repository implements vscode.Disposable {
         // Ignore index churn and our own lock files; refs/HEAD/packed-refs/worktrees are what matter.
         if (f.endsWith('.lock') || f.startsWith('objects')) return;
         // Remotes live in config; re-read them so a new remote's branches aren't taken for local ones.
-        if (f === 'config') this.remoteNames = undefined;
+        if (f === 'config') this.invalidateRemotes();
         if (f === 'index' || f.endsWith('/index') || f.endsWith('\\index')) { this.fireWorkingTree(); return; }
         if (this.debounce) clearTimeout(this.debounce);
         this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
@@ -353,7 +356,7 @@ export class Repository implements vscode.Disposable {
       // Recursive watch unsupported: fall back to a VS Code watcher on refs.
       const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.commonDir, '{HEAD,packed-refs,config,*_HEAD,refs/**,worktrees/**,rebase-merge/**,rebase-apply/**}'));
       const fire = (u?: vscode.Uri) => {
-        if (u && path.basename(u.fsPath) === 'config') this.remoteNames = undefined;
+        if (u && path.basename(u.fsPath) === 'config') this.invalidateRemotes();
         if (this.debounce) clearTimeout(this.debounce);
         this.debounce = setTimeout(() => this._onDidChange.fire(), 300);
       };
@@ -362,6 +365,11 @@ export class Repository implements vscode.Disposable {
     }
   }
   private fallback: vscode.Disposable | undefined;
+
+  private invalidateRemotes(): void {
+    this.remoteNames = undefined;
+    this.remoteGen++;
+  }
 
   private fireWorkingTree(): void {
     if (this.wtDebounce) clearTimeout(this.wtDebounce);
