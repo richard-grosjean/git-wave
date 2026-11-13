@@ -2,7 +2,6 @@
 
 A fast git graph with worktrees.
 
-[![CI](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-grosjean/git-wave/actions/workflows/ci.yml)
 [![Marketplace](https://img.shields.io/visual-studio-marketplace/v/rgro.git-wave?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=rgro.git-wave)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
