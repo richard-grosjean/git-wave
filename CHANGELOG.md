@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-11-13)
 
 - Fix: branches no longer drop out of the graph after a fetch, push or checkout. Overlapping background refreshes could reset the graph to its first page, hiding branches whose tips were further down until you scrolled again.
 - Fix: a `git remote` read that was still running when `.git/config` changed could cache the old remote list, so a new or renamed remote's branches showed as local branches.
