@@ -89,6 +89,10 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   reg('gitwave.commit.merge', (c: GraphContext) => (c.name ?? c.hash) && commitActions.merge(c.name ?? c.hash!));
   reg('gitwave.commit.reset', (c: GraphContext) => c.hash && commitActions.reset(c.hash));
   reg('gitwave.commit.copyHash', (c: GraphContext) => c.hash && vscode.env.clipboard.writeText(c.hash));
+  reg('gitwave.commit.openOnRemote', async (c: GraphContext) => c.hash && commitActions.openUrl(await commitActions.commitWebUrl(c.hash)));
+  reg('gitwave.commit.copyRemoteLink', async (c: GraphContext) => c.hash && commitActions.copyUrl(await commitActions.commitWebUrl(c.hash)));
+  reg('gitwave.branch.openOnRemote', async (c: GraphContext) => commitActions.openUrl(await commitActions.branchWebUrl(c)));
+  reg('gitwave.branch.copyRemoteLink', async (c: GraphContext) => commitActions.copyUrl(await commitActions.branchWebUrl(c)));
   reg('gitwave.commit.copySubject', (c: GraphContext) => c.subject && vscode.env.clipboard.writeText(c.subject));
   reg('gitwave.branch.checkout', (c: GraphContext) => c.name && (c.webviewSection === 'remote' ? commitActions.checkoutRemote(c.name) : commitActions.checkoutBranch(c.name)));
   reg('gitwave.branch.merge', (c: GraphContext) => c.name && commitActions.merge(c.name));

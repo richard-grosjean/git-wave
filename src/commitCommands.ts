@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { GitError } from './git/exec';
 import type { Repository } from './git/repository';
 import type { OperationAction } from './shared/types';
-import { pullRequestUrl } from './git/remote-url';
+import { branchUrl, commitUrl, pullRequestUrl } from './git/remote-url';
 import { shortBranch } from './git/worktree-parse';
 
 /** Context object VS Code passes from `data-vscode-context` on right-click in the webview. */
@@ -215,6 +215,51 @@ export class CommitActions {
     const url = pullRequestUrl(await repo.remoteUrl(split.remote), split.branch);
     if (!url) { void vscode.window.showErrorMessage(`Git Wave: don't know how to open a pull request for remote "${split.remote}" (GitHub, GitLab and Bitbucket are supported).`); return; }
     await vscode.env.openExternal(vscode.Uri.parse(url, true));
+  }
+
+  /**
+   * Web URL for a commit. Uses a remote that already has the commit (preferring origin), so the
+   * link doesn't 404; asks before falling back to a remote that doesn't have it yet.
+   */
+  async commitWebUrl(hash: string): Promise<string | undefined> {
+    const repo = this.repoFor();
+    if (!repo) return undefined;
+    const remotes = await repo.remotes();
+    if (!remotes.length) { void vscode.window.showErrorMessage('Git Wave: this repository has no remotes.'); return undefined; }
+    const containing = await repo.remoteBranchesContaining(hash).catch(() => [] as string[]);
+    const holders = new Set((await Promise.all(containing.map((r) => repo.splitRemoteRef(r)))).map((s) => s?.remote).filter(Boolean));
+    let remote = holders.has('origin') ? 'origin' : [...holders][0];
+    if (!remote) {
+      const ok = await vscode.window.showWarningMessage(`${hash.slice(0, 7)} isn't on any remote branch yet (as of the last fetch).`, { modal: true, detail: 'The link will only work once the commit is pushed.' }, 'Continue');
+      if (!ok) return undefined;
+      remote = remotes.includes('origin') ? 'origin' : remotes[0]!;
+    }
+    const url = commitUrl(await repo.remoteUrl(remote), hash);
+    if (!url) void vscode.window.showErrorMessage(`Git Wave: don't know how to link to remote "${remote}" (GitHub, GitLab and Bitbucket are supported).`);
+    return url;
+  }
+
+  /** Web URL for a branch: a remote branch directly, or a local branch's upstream. */
+  async branchWebUrl(c: GraphContext): Promise<string | undefined> {
+    const repo = this.repoFor();
+    if (!repo || !c.name) return undefined;
+    const ref = c.webviewSection === 'remote' ? c.name : c.hasUpstream ? c.upstream : undefined;
+    if (!ref) { void vscode.window.showErrorMessage(`Git Wave: "${c.name}" isn't on a remote yet. Push it first.`); return undefined; }
+    const split = await repo.splitRemoteRef(ref);
+    if (!split) { void vscode.window.showErrorMessage(`Git Wave: no remote found for "${ref}".`); return undefined; }
+    const url = branchUrl(await repo.remoteUrl(split.remote), split.branch);
+    if (!url) void vscode.window.showErrorMessage(`Git Wave: don't know how to link to remote "${split.remote}" (GitHub, GitLab and Bitbucket are supported).`);
+    return url;
+  }
+
+  async openUrl(url: string | undefined): Promise<void> {
+    if (url) await vscode.env.openExternal(vscode.Uri.parse(url, true));
+  }
+
+  async copyUrl(url: string | undefined): Promise<void> {
+    if (!url) return;
+    await vscode.env.clipboard.writeText(url);
+    vscode.window.setStatusBarMessage('$(link) Link copied', 2500);
   }
 
   async renameBranch(name: string): Promise<void> {

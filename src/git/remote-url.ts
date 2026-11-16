@@ -35,3 +35,26 @@ export function pullRequestUrl(remoteUrl: string | undefined, branch: string): s
   if (r.host.includes('bitbucket')) return `${base}/pull-requests/new?source=${b}`;
   return undefined;
 }
+
+type Host = 'github' | 'gitlab' | 'bitbucket';
+function web(remoteUrl: string | undefined): { base: string; host: Host } | undefined {
+  const r = parseRemoteUrl(remoteUrl);
+  if (!r) return undefined;
+  const host: Host | undefined = r.host.includes('github') ? 'github' : r.host.includes('gitlab') ? 'gitlab' : r.host.includes('bitbucket') ? 'bitbucket' : undefined;
+  return host && { base: `https://${r.host}/${r.path}`, host };
+}
+
+/** The web page for a commit on GitHub, GitLab or Bitbucket. Undefined for other hosts. */
+export function commitUrl(remoteUrl: string | undefined, hash: string): string | undefined {
+  const w = web(remoteUrl);
+  if (!w) return undefined;
+  return w.host === 'github' ? `${w.base}/commit/${hash}` : w.host === 'gitlab' ? `${w.base}/-/commit/${hash}` : `${w.base}/commits/${hash}`;
+}
+
+/** The web page for a branch on GitHub, GitLab or Bitbucket. Undefined for other hosts. */
+export function branchUrl(remoteUrl: string | undefined, branch: string): string | undefined {
+  const w = web(remoteUrl);
+  if (!w) return undefined;
+  const b = branch.split('/').map(encodeURIComponent).join('/');
+  return w.host === 'github' ? `${w.base}/tree/${b}` : w.host === 'gitlab' ? `${w.base}/-/tree/${b}` : `${w.base}/src/${b}`;
+}

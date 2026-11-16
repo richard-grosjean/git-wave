@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRemoteUrl, pullRequestUrl } from '../src/git/remote-url.js';
+import { branchUrl, commitUrl, parseRemoteUrl, pullRequestUrl } from '../src/git/remote-url.js';
 
 test('parseRemoteUrl handles scp, ssh and https forms', () => {
   assert.deepEqual(parseRemoteUrl('git@github.com:acme/app.git'), { host: 'github.com', path: 'acme/app' });
@@ -16,4 +16,14 @@ test('pullRequestUrl builds per-host compare pages', () => {
   assert.equal(pullRequestUrl('git@gitlab.com:grp/app.git', 'feat/x'), 'https://gitlab.com/grp/app/-/merge_requests/new?merge_request%5Bsource_branch%5D=feat%2Fx');
   assert.equal(pullRequestUrl('git@bitbucket.org:acme/app.git', 'fix'), 'https://bitbucket.org/acme/app/pull-requests/new?source=fix');
   assert.equal(pullRequestUrl('git@example.com:acme/app.git', 'fix'), undefined);
+});
+
+test('commitUrl and branchUrl build per-host pages', () => {
+  assert.equal(commitUrl('git@github.com:acme/app.git', 'abc123'), 'https://github.com/acme/app/commit/abc123');
+  assert.equal(commitUrl('git@gitlab.com:grp/app.git', 'abc123'), 'https://gitlab.com/grp/app/-/commit/abc123');
+  assert.equal(commitUrl('git@bitbucket.org:acme/app.git', 'abc123'), 'https://bitbucket.org/acme/app/commits/abc123');
+  assert.equal(commitUrl('git@example.com:acme/app.git', 'abc123'), undefined);
+  assert.equal(branchUrl('https://github.com/acme/app.git', 'feat/x y'), 'https://github.com/acme/app/tree/feat/x%20y');
+  assert.equal(branchUrl('git@gitlab.com:grp/app.git', 'feat/x'), 'https://gitlab.com/grp/app/-/tree/feat/x');
+  assert.equal(branchUrl('git@bitbucket.org:acme/app.git', 'fix'), 'https://bitbucket.org/acme/app/src/fix');
 });

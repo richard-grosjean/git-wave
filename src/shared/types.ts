@@ -106,6 +106,8 @@ export interface OperationState {
 export interface GraphConfig {
   laneWidth: number;
   rowHeight: number;
+  /** Commit list font size in px; 0 = VS Code's UI font size + 1. */
+  fontSize: number;
   colors: string[];
   dateFormat: 'relative' | 'absolute' | 'iso';
   avatars: boolean;
@@ -123,6 +125,8 @@ export type HostMessage =
   | { type: 'avatars'; avatars: Record<string, string> }
   | { type: 'status'; files: CommitFile[] }
   | { type: 'loading'; loading: boolean }
+  /** When the repo last fetched (ms since epoch), or undefined if it never has. */
+  | { type: 'lastFetch'; time: number | undefined }
   | { type: 'reveal'; hash: string }
   | { type: 'operation'; op: OperationState | undefined }
   | { type: 'error'; message: string };
@@ -132,7 +136,6 @@ export type WorktreeAction = 'open' | 'openNewWindow' | 'lock' | 'unlock' | 'rem
 
 export type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'refresh' }
   | { type: 'fetch' }
   | { type: 'loadMore' }
   | { type: 'selectRepo'; repo: string }

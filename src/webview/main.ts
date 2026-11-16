@@ -9,7 +9,7 @@ const persisted: PersistedState = (vscode.getState() as PersistedState | undefin
 const persist = () => vscode.setState(persisted);
 
 // ---------- state ----------
-let config: GraphConfig = { laneWidth: 14, rowHeight: 24, colors: ['#4e9bff'], dateFormat: 'relative', avatars: true, visibleLanes: 12 };
+let config: GraphConfig = { laneWidth: 14, rowHeight: 28, fontSize: 0, colors: ['#4e9bff'], dateFormat: 'relative', avatars: true, visibleLanes: 12 };
 let commits: Commit[] = [];
 let rows: Row[] = [];
 let tail: Edge[] = [];
@@ -37,8 +37,7 @@ app.innerHTML = `
     <input id="filter" type="search" placeholder="Filter by message, author, hash or ref…" spellcheck="false">
     <span id="count"></span>
     <span id="spinner" class="codicon codicon-loading codicon-modifier-spin" hidden></span>
-    <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span></button>
-    <button id="refresh" class="icon-btn" title="Refresh"><span class="codicon codicon-refresh"></span></button>
+    <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span><span id="fetch-age"></span></button>
   </div>
   <div id="opbar" hidden>
     <span class="codicon codicon-warning"></span><span id="op-text"></span>
@@ -99,6 +98,7 @@ function graphFullWidth(): number {
 function applyCss(): void {
   const root = document.documentElement.style;
   root.setProperty('--row-h', `${config.rowHeight}px`);
+  root.setProperty('--row-font', config.fontSize > 0 ? `${config.fontSize}px` : 'calc(var(--vscode-font-size) + 1px)');
   root.setProperty('--graph-w', `${graphVisibleWidth()}px`);
   root.setProperty('--col-author', `${persisted.colAuthor ?? 170}px`);
   root.setProperty('--col-date', `${persisted.colDate ?? 130}px`);
@@ -555,7 +555,11 @@ function formatDate(unix: number): string {
   const d = new Date(unix * 1000);
   if (config.dateFormat === 'iso') return d.toISOString().slice(0, 16).replace('T', ' ');
   if (config.dateFormat === 'absolute') return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const s = (Date.now() - d.getTime()) / 1000;
+  return relativeTime(d.getTime());
+}
+
+function relativeTime(ms: number): string {
+  const s = (Date.now() - ms) / 1000;
   if (s < 60) return 'just now';
   if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute');
   if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour');
@@ -606,7 +610,6 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('#opbar [data-op]')
 }
 $('detail-close').onclick = () => select(null);
 $('detail-hash').onclick = () => { if (selected && selected !== UNCOMMITTED) post({ type: 'copy', text: selected }); };
-$('refresh').onclick = () => post({ type: 'refresh' });
 $('fetch').onclick = () => post({ type: 'fetch' });
 repoSel.onchange = () => post({ type: 'selectRepo', repo: repoSel.value });
 let filterTimer = 0;
@@ -638,6 +641,33 @@ for (const handle of document.querySelectorAll<HTMLElement>('.resize')) {
     handle.addEventListener('pointerup', up);
   });
 }
+
+// "Last fetched" label on the fetch button, re-rendered every 30s so the age stays current.
+let lastFetch: number | undefined;
+const STALE_MS = 60 * 60 * 1000;
+function shortAge(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+function renderFetchAge(): void {
+  const btn = $('fetch');
+  const label = $('fetch-age');
+  if (lastFetch === undefined) {
+    label.textContent = 'never';
+    btn.title = 'Never fetched. Click to fetch all remotes';
+    btn.classList.add('stale');
+    return;
+  }
+  const age = Date.now() - lastFetch;
+  label.textContent = shortAge(age);
+  const when = new Date(lastFetch).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  btn.title = `Last fetched ${relativeTime(lastFetch)} (${when}). Click to fetch all remotes`;
+  btn.classList.toggle('stale', age > STALE_MS);
+}
+window.setInterval(() => { if (currentRepo) renderFetchAge(); }, 30000);
 
 window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
   const m = e.data;
@@ -706,6 +736,10 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       loading = m.loading;
       $('spinner').hidden = !loading;
       $('empty').hidden = view.length > 0 || loading;
+      break;
+    case 'lastFetch':
+      lastFetch = m.time;
+      renderFetchAge();
       break;
     case 'reveal':
       revealHash(m.hash);

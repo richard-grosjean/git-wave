@@ -328,6 +328,28 @@
         "command": "gitwave.uncommitted.discard",
         "title": "Discard Changes…",
         "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.commit.openOnRemote",
+        "title": "Open Commit in Browser",
+        "category": "Git Wave",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "gitwave.commit.copyRemoteLink",
+        "title": "Copy Commit Link",
+        "category": "Git Wave"
+      },
+      {
+        "command": "gitwave.branch.openOnRemote",
+        "title": "Open Branch in Browser",
+        "category": "Git Wave",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "gitwave.branch.copyRemoteLink",
+        "title": "Copy Branch Link",
+        "category": "Git Wave"
       }
     ],
     "views": {
@@ -617,6 +639,22 @@
         {
           "command": "gitwave.uncommitted.discard",
           "when": "false"
+        },
+        {
+          "command": "gitwave.commit.openOnRemote",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.commit.copyRemoteLink",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.openOnRemote",
+          "when": "false"
+        },
+        {
+          "command": "gitwave.branch.copyRemoteLink",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -864,6 +902,36 @@
           "command": "gitwave.uncommitted.discard",
           "when": "webviewId == 'gitwave.graph' && webviewSection == 'uncommitted'",
           "group": "3_edit@1"
+        },
+        {
+          "command": "gitwave.commit.openOnRemote",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "8_web@1"
+        },
+        {
+          "command": "gitwave.commit.copyRemoteLink",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'commit'",
+          "group": "8_web@2"
+        },
+        {
+          "command": "gitwave.branch.openOnRemote",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && hasUpstream",
+          "group": "8_web@1"
+        },
+        {
+          "command": "gitwave.branch.copyRemoteLink",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'branch' && hasUpstream",
+          "group": "8_web@2"
+        },
+        {
+          "command": "gitwave.branch.openOnRemote",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "8_web@1"
+        },
+        {
+          "command": "gitwave.branch.copyRemoteLink",
+          "when": "webviewId == 'gitwave.graph' && webviewSection == 'remote'",
+          "group": "8_web@2"
         }
       ]
     },
@@ -905,10 +973,17 @@
         },
         "gitwave.graph.rowHeight": {
           "type": "number",
-          "default": 24,
+          "default": 28,
           "minimum": 16,
           "maximum": 48,
           "description": "Row height in pixels."
+        },
+        "gitwave.graph.fontSize": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 32,
+          "description": "Font size of the commit list in pixels. 0 uses VS Code's UI font size plus one."
         },
         "gitwave.graph.colors": {
           "type": "array",

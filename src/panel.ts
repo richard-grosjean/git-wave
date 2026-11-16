@@ -113,9 +113,6 @@ export class GraphPanel implements vscode.Disposable {
         this.post({ type: 'repos', repos: this.repos.map((r) => ({ path: r.root, label: r.label })), current: repo?.root ?? '' });
         await this.reload();
         return;
-      case 'refresh':
-        await this.reload();
-        return;
       case 'fetch':
         if (!repo) return;
         this.post({ type: 'loading', loading: true });
@@ -182,7 +179,14 @@ export class GraphPanel implements vscode.Disposable {
     const keep = Math.min(this.depth, MAX_RELOAD_DEPTH);
     this.loaded = 0;
     this.hasMore = false;
-    await Promise.all([this.loadPage(true, { quiet, minCount: keep }), this.loadWorktrees()]);
+    await Promise.all([this.loadPage(true, { quiet, minCount: keep }), this.loadWorktrees(), this.postLastFetch()]);
+  }
+
+  private async postLastFetch(): Promise<void> {
+    const repo = this.repo;
+    if (!repo) return;
+    const time = await repo.lastFetch();
+    if (repo === this.repo) this.post({ type: 'lastFetch', time });
   }
 
   /** Tell the webview about an in-progress merge/rebase/cherry-pick/revert (or that there is none). */
@@ -325,7 +329,8 @@ export function readConfig(): GraphConfig {
   const c = vscode.workspace.getConfiguration('gitwave');
   return {
     laneWidth: c.get<number>('graph.laneWidth', 14),
-    rowHeight: c.get<number>('graph.rowHeight', 24),
+    rowHeight: c.get<number>('graph.rowHeight', 28),
+    fontSize: c.get<number>('graph.fontSize', 0),
     colors: c.get<string[]>('graph.colors', []),
     dateFormat: c.get<'relative' | 'absolute' | 'iso'>('dateFormat', 'relative'),
     avatars: c.get<boolean>('avatars', true),

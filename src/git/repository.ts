@@ -168,6 +168,13 @@ export class Repository implements vscode.Disposable {
     return stdout.split('\n').map((s) => s.trim()).filter((s) => s && !remotes.includes(s) && !s.endsWith('/HEAD'));
   }
 
+  /** Remote-tracking branches (e.g. `origin/main`) whose history contains `hash`, as of the last fetch. */
+  async remoteBranchesContaining(hash: string): Promise<string[]> {
+    const { stdout } = await git(this.root, ['for-each-ref', '--format=%(refname:short)', `--contains=${hash}`, 'refs/remotes/']);
+    const remotes = await this.remotes();
+    return stdout.split('\n').map((s) => s.trim()).filter((s) => s && !remotes.includes(s) && !s.endsWith('/HEAD'));
+  }
+
   /** Splits `origin/feat/x` into its configured remote and branch; remote names may contain `/`. */
   async splitRemoteRef(remoteBranch: string): Promise<{ remote: string; branch: string } | undefined> {
     const remote = [...await this.remotes()].sort((a, b) => b.length - a.length).find((r) => remoteBranch.startsWith(`${r}/`));
@@ -288,6 +295,22 @@ export class Repository implements vscode.Disposable {
   }
   deleteTag(name: string): Promise<unknown> { return git(this.root, ['tag', '-d', name]); }
   fetch(): Promise<unknown> { return git(this.root, ['fetch', '--all', '--prune']); }
+
+  /**
+   * When any worktree of this repo last fetched (ms since epoch), from FETCH_HEAD's mtime.
+   * Git rewrites FETCH_HEAD on every successful fetch/pull, including VS Code's autofetch and the
+   * terminal. FETCH_HEAD is per-worktree, so take the newest across the main and linked ones.
+   */
+  async lastFetch(): Promise<number | undefined> {
+    const dirs = [this.commonDir];
+    try {
+      const wts = await fs.promises.readdir(path.join(this.commonDir, 'worktrees'));
+      dirs.push(...wts.map((w) => path.join(this.commonDir, 'worktrees', w)));
+    } catch { /* no linked worktrees */ }
+    const times = await Promise.all(dirs.map((d) => fs.promises.stat(path.join(d, 'FETCH_HEAD')).then((s) => s.mtimeMs, () => 0)));
+    const max = Math.max(...times);
+    return max > 0 ? max : undefined;
+  }
 
   async remoteUrl(name = 'origin'): Promise<string | undefined> {
     const { stdout } = await git(this.root, ['remote', 'get-url', name]).catch(() => ({ stdout: '' }));
