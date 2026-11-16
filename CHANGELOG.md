@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The fetch button shows how long ago the repo was last fetched (`5m`, `3h`, `2d`), including fetches from VS Code's autofetch or the terminal, and turns amber after an hour. Hover for the exact time.
+- Right-click a commit or branch to open it in the browser or copy its link (GitHub, GitLab and Bitbucket). Commit links use a remote that already has the commit, and warn if it isn't pushed yet.
+- Larger, easier-to-read commit list: text is 2px above VS Code's UI font and rows are taller (default row height 32), with more room around ref tags. New `gitwave.graph.fontSize` setting.
+- The toolbar refresh button is gone, since the graph updates itself. "Git Wave: Refresh Graph" is still in the command palette.
+
 ## 0.5.2 (2026-11-13)
 
 - 
