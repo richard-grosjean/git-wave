@@ -9,7 +9,7 @@ const persisted: PersistedState = (vscode.getState() as PersistedState | undefin
 const persist = () => vscode.setState(persisted);
 
 // ---------- state ----------
-let config: GraphConfig = { laneWidth: 14, rowHeight: 28, fontSize: 0, colors: ['#4e9bff'], dateFormat: 'relative', avatars: true, visibleLanes: 12 };
+let config: GraphConfig = { laneWidth: 14, rowHeight: 32, fontSize: 0, colors: ['#4e9bff'], dateFormat: 'relative', avatars: true, visibleLanes: 12 };
 let commits: Commit[] = [];
 let rows: Row[] = [];
 let tail: Edge[] = [];
@@ -98,7 +98,7 @@ function graphFullWidth(): number {
 function applyCss(): void {
   const root = document.documentElement.style;
   root.setProperty('--row-h', `${config.rowHeight}px`);
-  root.setProperty('--row-font', config.fontSize > 0 ? `${config.fontSize}px` : 'calc(var(--vscode-font-size) + 1px)');
+  root.setProperty('--row-font', config.fontSize > 0 ? `${config.fontSize}px` : 'calc(var(--vscode-font-size) + 2px)');
   root.setProperty('--graph-w', `${graphVisibleWidth()}px`);
   root.setProperty('--col-author', `${persisted.colAuthor ?? 170}px`);
   root.setProperty('--col-date', `${persisted.colDate ?? 130}px`);

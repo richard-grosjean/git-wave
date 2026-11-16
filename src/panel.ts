@@ -329,7 +329,7 @@ export function readConfig(): GraphConfig {
   const c = vscode.workspace.getConfiguration('gitwave');
   return {
     laneWidth: c.get<number>('graph.laneWidth', 14),
-    rowHeight: c.get<number>('graph.rowHeight', 28),
+    rowHeight: c.get<number>('graph.rowHeight', 32),
     fontSize: c.get<number>('graph.fontSize', 0),
     colors: c.get<string[]>('graph.colors', []),
     dateFormat: c.get<'relative' | 'absolute' | 'iso'>('dateFormat', 'relative'),

@@ -98,7 +98,7 @@ body {
 /* ref chips */
 .refs { display: inline-flex; gap: 8px; flex-shrink: 0; }
 .chip {
-  display: inline-flex; align-items: center; gap: 3px; height: calc(var(--row-h) - 8px);
+  display: inline-flex; align-items: center; gap: 3px; height: calc(var(--row-h) - 12px);
   padding: 0 6px; border-radius: 3px; font-size: 0.88em; line-height: 1;
   border: 1px solid var(--chip); color: var(--vscode-foreground);
   background: color-mix(in srgb, var(--chip) 18%, transparent);

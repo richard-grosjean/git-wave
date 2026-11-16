@@ -67,8 +67,8 @@ code --install-extension rgro.git-wave
 | `gitwave.showTags` | `true` | Include tags. |
 | `gitwave.dateFormat` | `relative` | `relative`, `absolute`, or `iso`. |
 | `gitwave.graph.laneWidth` | `14` | Pixels per lane. |
-| `gitwave.graph.rowHeight` | `28` | Row height in pixels. |
-| `gitwave.graph.fontSize` | `0` | Commit list font size in pixels. `0` uses VS Code's UI font size plus one. |
+| `gitwave.graph.rowHeight` | `32` | Row height in pixels. |
+| `gitwave.graph.fontSize` | `0` | Commit list font size in pixels. `0` uses VS Code's UI font size plus two. |
 | `gitwave.graph.colors` | 10 colours | Lane colours, cycled. |
 | `gitwave.graph.visibleLanes` | `12` | Lanes shown before the graph column scrolls horizontally. |
 | `gitwave.avatars` | `true` | Show author avatars. |

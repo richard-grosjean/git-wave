@@ -973,7 +973,7 @@
         },
         "gitwave.graph.rowHeight": {
           "type": "number",
-          "default": 28,
+          "default": 32,
           "minimum": 16,
           "maximum": 48,
           "description": "Row height in pixels."
@@ -983,7 +983,7 @@
           "default": 0,
           "minimum": 0,
           "maximum": 32,
-          "description": "Font size of the commit list in pixels. 0 uses VS Code's UI font size plus one."
+          "description": "Font size of the commit list in pixels. 0 uses VS Code's UI font size plus two."
         },
         "gitwave.graph.colors": {
           "type": "array",

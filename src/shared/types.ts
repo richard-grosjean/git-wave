@@ -106,7 +106,7 @@ export interface OperationState {
 export interface GraphConfig {
   laneWidth: number;
   rowHeight: number;
-  /** Commit list font size in px; 0 = VS Code's UI font size + 1. */
+  /** Commit list font size in px; 0 = VS Code's UI font size + 2. */
   fontSize: number;
   colors: string[];
   dateFormat: 'relative' | 'absolute' | 'iso';
