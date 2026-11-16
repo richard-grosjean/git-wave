@@ -22,7 +22,7 @@ const extension = {
   outfile: 'dist/extension.js',
   platform: 'node',
   format: 'cjs',
-  target: 'node20',
+  target: 'node24',
   external: ['vscode'],
 };
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Requires VS Code 1.123 or later. The extension is now built for the Node 24 runtime that VS Code ships from 1.123.
+- Build tooling: TypeScript 7, esbuild 0.28, vsce 4; release workflow on Node 26 with current GitHub Actions.
+
 ## 0.6.0 (2026-11-16)
 
 - The fetch button shows how long ago the repo was last fetched (`5m`, `3h`, `2d`), including fetches from VS Code's autofetch or the terminal, and turns amber after an hour. Hover for the exact time.

@@ -18,7 +18,7 @@
   "homepage": "https://github.com/richard-grosjean/git-wave#readme",
   "private": true,
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.123.0"
   },
   "categories": [
     "SCM Providers",
@@ -1030,10 +1030,10 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
-    "@types/vscode": "^1.90.0",
+    "@types/vscode": "1.120.0",
     "@vscode/codicons": "^0.0.45",
-    "@vscode/vsce": "^3.0.0",
-    "esbuild": "^0.24.0",
-    "typescript": "^5.6.0"
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }
