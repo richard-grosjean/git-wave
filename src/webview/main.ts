@@ -23,6 +23,8 @@ let indexByHash = new Map<string, number>();
 let avatars = new Map<string, string>();
 const avatarFailed = new Set<string>();
 let selected: string | null = null;
+/** Row outlined while its context menu is open. */
+let contextHash: string | null = null;
 let pendingReveal: string | null = null;
 let revealAttempts = 0;
 let headHash: string | null = null;
@@ -152,6 +154,7 @@ function render(): void {
     el.style.transform = `translateY(${v * rowH}px)`;
     el.dataset.hash = c.hash;
     el.classList.toggle('selected', c.hash === selected);
+    el.classList.toggle('context', c.hash === contextHash);
     el.classList.toggle('head', c.hash === headHash);
     el.classList.toggle('uncommitted', c.hash === UNCOMMITTED);
     fillRow(el, c, rows[i]!);
@@ -243,8 +246,8 @@ function splitRemote(r: Ref): { remote: string; branch: string } {
 
 /**
  * Ref chips for a commit. A local branch, the remote branches pointing at the same commit with the same name,
- * and the branch's worktree are joined into one segmented tag (`branch | origin | worktree | this window`).
- * Each segment keeps its own right-click menu.
+ * and the branch's worktree are joined into one segmented tag (`branch | origin | worktree`). Each segment keeps its
+ * own right-click menu. The worktree open in this window gets a separate `open in this window` tag after it.
  */
 function refChips(c: Commit, color: string): HTMLElement[] {
   const out: HTMLElement[] = [];
@@ -262,20 +265,25 @@ function refChips(c: Commit, color: string): HTMLElement[] {
       }
     }
     const wt = worktreesByBranch.get(r.name);
+    let here: HTMLElement | undefined;
     if (wt) {
       const ctx = JSON.parse(chip.dataset.vscodeContext!);
       chip.dataset.vscodeContext = JSON.stringify({ ...ctx, worktreePath: wt.path, worktreeIsCurrent: !!wt.isCurrent });
       shownWorktrees.add(wt.path);
-      segments.push(...worktreeSegments(wt, color));
+      const wtSegs = worktreeSegments(wt, color);
+      segments.push(...wtSegs);
+      if (wtSegs.length && wt.isCurrent) here = hereChip(wt);
     }
     const g = group(segments);
     if (r.isHead) g.classList.add('is-head');
     out.push(g);
+    if (here) out.push(here);
   }
   // Worktrees not attached to a branch chip (detached HEADs).
   for (const wt of worktreesByHead.get(c.hash) ?? []) {
     const segs = shownWorktrees.has(wt.path) ? [] : worktreeSegments(wt, color);
     if (segs.length) out.push(group(segs));
+    if (segs.length && wt.isCurrent) out.push(hereChip(wt));
   }
   return out;
 }
@@ -336,34 +344,45 @@ function trackSummary(t: { ahead?: number; behind?: number }): string {
   return parts.length ? ` (${parts.join(', ')})` : ' (up to date)';
 }
 
-/**
- * Worktree segment(s): `worktree-name`, plus a `this window` segment when it's the one open here. Omitted when the
- * repo has a single worktree (unless detached), where it would only repeat the obvious.
- */
-function worktreeSegments(wt: Worktree, color: string): HTMLElement[] {
-  if (worktrees.length <= 1 && !wt.detached) return [];
-  const ctx = JSON.stringify({ webviewSection: 'worktree', path: wt.path, locked: wt.locked, isMain: wt.isMain, isCurrent: !!wt.isCurrent, preventDefaultContextMenuItems: true });
-  const title = [
+function worktreeContext(wt: Worktree): string {
+  return JSON.stringify({ webviewSection: 'worktree', path: wt.path, locked: wt.locked, isMain: wt.isMain, isCurrent: !!wt.isCurrent, preventDefaultContextMenuItems: true });
+}
+
+function worktreeTitle(wt: Worktree): string {
+  return [
     `${wt.isMain ? 'Main worktree' : 'Worktree'}: ${wt.path}`,
     wt.isCurrent ? 'Open in this window' : '',
     wt.locked ? `Locked${wt.lockReason ? ': ' + wt.lockReason : ''}` : '',
     'Right-click for worktree actions',
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Worktree segment: `worktree-name`. Omitted when the repo has a single worktree (unless detached), where it would
+ * only repeat the obvious.
+ */
+function worktreeSegments(wt: Worktree, color: string): HTMLElement[] {
+  if (worktrees.length <= 1 && !wt.detached) return [];
   const tag = document.createElement('span');
   tag.className = `chip wt${wt.isCurrent ? ' is-current' : ''}${wt.locked ? ' locked' : ''}`;
   tag.style.setProperty('--chip', color);
   tag.innerHTML = '<span class="codicon codicon-worktree"></span>';
   tag.append(wt.detached ? `${basename(wt.path)} (detached)` : basename(wt.path));
   if (wt.locked) tag.insertAdjacentHTML('beforeend', '<span class="codicon codicon-lock lock"></span>');
-  tag.title = title;
-  tag.dataset.vscodeContext = ctx;
-  if (!wt.isCurrent) return [tag];
+  tag.title = worktreeTitle(wt);
+  tag.dataset.vscodeContext = worktreeContext(wt);
+  return [tag];
+}
+
+/** Standalone tag marking the worktree that's open in this window. */
+function hereChip(wt: Worktree): HTMLElement {
   const here = document.createElement('span');
   here.className = 'chip wt-here';
-  here.textContent = 'this window';
-  here.title = title;
-  here.dataset.vscodeContext = ctx;
-  return [tag, here];
+  here.innerHTML = '<span class="codicon codicon-unlock"></span>';
+  here.append('open in this window');
+  here.title = worktreeTitle(wt);
+  here.dataset.vscodeContext = worktreeContext(wt);
+  return here;
 }
 
 function drawGraph(first: number, last: number, top: number, height: number): void {
@@ -600,11 +619,15 @@ rowsEl.addEventListener('click', (e) => {
   const row = t.closest<HTMLElement>('.row');
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash);
 });
+// Right-click outlines the menu's target row without selecting it (no detail pane).
+// The outline clears on the next interaction, i.e. once the menu is dismissed or used.
 rowsEl.addEventListener('contextmenu', (e) => {
-  // Select the row under the cursor so the detail pane matches the menu target.
   const row = (e.target as HTMLElement).closest<HTMLElement>('.row');
-  if (row?.dataset.hash && row.dataset.hash !== selected) select(row.dataset.hash);
+  contextHash = row?.dataset.hash ?? null;
+  render();
 });
+const clearContext = () => { if (contextHash) { contextHash = null; render(); } };
+for (const ev of ['pointerdown', 'keydown', 'blur', 'focus'] as const) window.addEventListener(ev, clearContext, true);
 for (const b of document.querySelectorAll<HTMLButtonElement>('#opbar [data-op]')) {
   b.onclick = () => post({ type: 'operation', action: b.dataset.op as OperationAction });
 }

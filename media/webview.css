@@ -78,6 +78,7 @@ body {
   cursor: pointer; white-space: nowrap; contain: layout style; font-size: var(--row-font);
 }
 .row:hover { background: var(--vscode-list-hoverBackground); }
+.row.context { outline: 1px solid var(--vscode-list-focusOutline, var(--vscode-focusBorder)); outline-offset: -1px; }
 .row.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
 .row > div { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
 .row .c-graph { pointer-events: none; }
@@ -110,7 +111,7 @@ body {
 .chip.head { font-style: italic; }
 .chip.stash { border-style: dashed; opacity: 0.9; }
 .chip .track { margin-left: 3px; font-size: 0.92em; opacity: 0.85; font-variant-numeric: tabular-nums; }
-/* segmented ref tag: branch | origin | worktree | this window */
+/* segmented ref tag: branch | origin | worktree */
 .ref-group { display: inline-flex; }
 .ref-group > .chip:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .ref-group > .chip + .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
@@ -121,10 +122,15 @@ body {
   background: var(--chip); color: var(--vscode-editor-background); font-weight: normal;
   border-left-color: color-mix(in srgb, var(--vscode-editor-background) 45%, var(--chip));
 }
-/* worktree segment: neutral; filled when it's this window's worktree */
+/* worktree segment: neutral; brighter text when it's this window's worktree */
 .chip.wt { border-color: var(--chip); background: transparent; color: var(--vscode-descriptionForeground); }
 .chip.wt.is-current { color: var(--vscode-foreground); }
-.chip.wt-here { border-color: var(--vscode-focusBorder); background: var(--vscode-focusBorder); color: var(--vscode-editor-background); }
+/* standalone "open in this window" tag: solid badge colour, so it stands apart from the lane colours */
+.chip.wt-here {
+  border-color: var(--vscode-activityBarBadge-background, var(--vscode-badge-background));
+  background: var(--vscode-activityBarBadge-background, var(--vscode-badge-background));
+  color: var(--vscode-activityBarBadge-foreground, var(--vscode-badge-foreground)); font-weight: 600;
+}
 .chip.wt .lock { color: var(--vscode-editorWarning-foreground, #e3b341); }
 
 /* detail pane */
