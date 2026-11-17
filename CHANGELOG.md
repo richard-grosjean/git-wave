@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The worktree open in this window now has its own "open in this window" tag next to its branch, with an icon and your theme's badge colour, instead of a faint grey "this window" segment.
+- Right-clicking a commit outlines its row while the menu is open, so you can see what the menu applies to. It no longer selects the commit and opens the detail pane.
+
 ## 0.6.1 (2026-11-16)
 
 - Requires VS Code 1.123 or later. The extension is now built for the Node 24 runtime that VS Code ships from 1.123.
