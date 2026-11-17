@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 (2026-11-17)
 
 - The worktree open in this window now has its own "open in this window" tag next to its branch, with an icon and your theme's badge colour, instead of a faint grey "this window" segment.
 - Right-clicking a commit outlines its row while the menu is open, so you can see what the menu applies to. It no longer selects the commit and opens the detail pane.
