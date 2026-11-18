@@ -145,6 +145,9 @@ function render(): void {
   const rowH = config.rowHeight;
   const top = scroller.scrollTop;
   const height = scroller.clientHeight;
+  // While the panel is in the background the scroller can measure as collapsed; rendering then
+  // would leave only a few rows drawn. Skip it; the visibility/focus/resize hooks re-render on return.
+  if (height === 0 || document.hidden) return;
   const first = Math.max(0, Math.floor(top / rowH) - 4);
   const last = Math.min(view.length - 1, Math.ceil((top + height) / rowH) + 4);
   const filtered = filterText.trim().length > 0;
@@ -198,6 +201,7 @@ function fillRow(el: HTMLDivElement, c: Commit, row: Row): void {
     el.dataset.vscodeContext = JSON.stringify({ webviewSection: 'uncommitted', preventDefaultContextMenuItems: true });
     avatarEl.replaceChildren();
     avatarEl.className = 'avatar';
+    delete avatarEl.dataset.key;
     nameEl.textContent = '';
     dateEl.textContent = '';
     dateEl.title = '';
@@ -215,7 +219,7 @@ function fillRow(el: HTMLDivElement, c: Commit, row: Row): void {
 }
 
 function renderAvatar(el: HTMLElement, c: Commit): void {
-  if (!config.avatars) { el.className = 'avatar'; el.replaceChildren(); return; }
+  if (!config.avatars) { el.className = 'avatar'; el.replaceChildren(); delete el.dataset.key; return; }
   const url = avatars.get(c.email.toLowerCase());
   const key = `${url ?? ''}|${c.author}`;
   if (el.dataset.key === key) return;
@@ -686,6 +690,10 @@ function rebuildIndexes(): void {
 // ---------- events ----------
 scroller.addEventListener('scroll', scheduleRender, { passive: true });
 new ResizeObserver(scheduleRender).observe(scroller);
+// Coming back to the tab: anything that arrived while hidden still needs drawing at the real size.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleRender(); });
+window.addEventListener('focus', scheduleRender);
+window.addEventListener('resize', scheduleRender);
 hscroll.addEventListener('scroll', () => { graphX = hscroll.scrollLeft; scheduleRender(); }, { passive: true });
 scroller.addEventListener('wheel', (e) => {
   // Shift+wheel (or a horizontal wheel) over the graph column pans the lanes.

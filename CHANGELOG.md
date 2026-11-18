@@ -4,6 +4,8 @@
 
 - Click a branch, remote or tag to highlight its history: its commits and the lines leading to them stay bright, everything else dims. Hover a tag for a quick preview. Click it again, press Esc or use the ✕ in the toolbar to clear.
 - The separate "open in this window" tag is gone. The worktree segment of a branch tag is now filled with the branch colour when it's the worktree open in this window, and hollow otherwise.
+- Fixed your avatar sometimes going blank on a new commit right after the "Uncommitted changes" row.
+- Fixed the graph showing only a few rows and then blank space after switching back to its tab.
 
 ## 0.6.2 (2026-11-17)
 
