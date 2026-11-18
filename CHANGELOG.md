@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Click a branch, remote or tag to highlight its history: its commits and the lines leading to them stay bright, everything else dims. Hover a tag for a quick preview. Click it again, press Esc or use the ✕ in the toolbar to clear.
+- The separate "open in this window" tag is gone. The worktree segment of a branch tag is now filled with the branch colour when it's the worktree open in this window, and hollow otherwise.
+
 ## 0.6.2 (2026-11-17)
 
 - The worktree open in this window now has its own "open in this window" tag next to its branch, with an icon and your theme's badge colour, instead of a faint grey "this window" segment.

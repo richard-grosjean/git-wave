@@ -28,6 +28,11 @@ let contextHash: string | null = null;
 let pendingReveal: string | null = null;
 let revealAttempts = 0;
 let headHash: string | null = null;
+/** Ref whose history is highlighted (clicked chip), and a hovered chip's commit previewing its own. */
+let pinned: { kind: Ref['kind']; name: string; hash: string } | null = null;
+let hoverTip: string | null = null;
+/** Highlighted ancestry: commits reachable from the tip, plus which edges of each row lead into them. */
+let lit: { tip: string; commits: Commit[]; n: number; set: Set<string>; edges: Uint8Array[]; tail: Uint8Array } | null = null;
 let graphX = 0; // horizontal scroll offset of the graph column, in px
 let currentRepo = '';
 
@@ -37,6 +42,7 @@ app.innerHTML = `
   <div id="toolbar">
     <select id="repo" title="Repository"></select>
     <input id="filter" type="search" placeholder="Filter by message, author, hash or ref…" spellcheck="false">
+    <span id="hl" hidden><span class="codicon codicon-git-branch"></span><span id="hl-name"></span><button id="hl-clear" class="icon-btn" title="Clear highlight (Esc)"><span class="codicon codicon-close"></span></button></span>
     <span id="count"></span>
     <span id="spinner" class="codicon codicon-loading codicon-modifier-spin" hidden></span>
     <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span><span id="fetch-age"></span></button>
@@ -142,6 +148,7 @@ function render(): void {
   const first = Math.max(0, Math.floor(top / rowH) - 4);
   const last = Math.min(view.length - 1, Math.ceil((top + height) / rowH) + 4);
   const filtered = filterText.trim().length > 0;
+  computeLit();
 
   let used = 0;
   for (let v = first; v <= last; v++) {
@@ -157,6 +164,7 @@ function render(): void {
     el.classList.toggle('context', c.hash === contextHash);
     el.classList.toggle('head', c.hash === headHash);
     el.classList.toggle('uncommitted', c.hash === UNCOMMITTED);
+    el.classList.toggle('dim', !!lit && !lit.set.has(c.hash));
     fillRow(el, c, rows[i]!);
   }
   for (let k = used; k < pool.length; k++) pool[k]!.hidden = true;
@@ -247,7 +255,7 @@ function splitRemote(r: Ref): { remote: string; branch: string } {
 /**
  * Ref chips for a commit. A local branch, the remote branches pointing at the same commit with the same name,
  * and the branch's worktree are joined into one segmented tag (`branch | origin | worktree`). Each segment keeps its
- * own right-click menu. The worktree open in this window gets a separate `open in this window` tag after it.
+ * own right-click menu. The worktree segment is filled when it's the one open in this window, hollow otherwise.
  */
 function refChips(c: Commit, color: string): HTMLElement[] {
   const out: HTMLElement[] = [];
@@ -265,25 +273,20 @@ function refChips(c: Commit, color: string): HTMLElement[] {
       }
     }
     const wt = worktreesByBranch.get(r.name);
-    let here: HTMLElement | undefined;
     if (wt) {
       const ctx = JSON.parse(chip.dataset.vscodeContext!);
       chip.dataset.vscodeContext = JSON.stringify({ ...ctx, worktreePath: wt.path, worktreeIsCurrent: !!wt.isCurrent });
       shownWorktrees.add(wt.path);
-      const wtSegs = worktreeSegments(wt, color);
-      segments.push(...wtSegs);
-      if (wtSegs.length && wt.isCurrent) here = hereChip(wt);
+      segments.push(...worktreeSegments(wt, color));
     }
     const g = group(segments);
     if (r.isHead) g.classList.add('is-head');
     out.push(g);
-    if (here) out.push(here);
   }
   // Worktrees not attached to a branch chip (detached HEADs).
   for (const wt of worktreesByHead.get(c.hash) ?? []) {
     const segs = shownWorktrees.has(wt.path) ? [] : worktreeSegments(wt, color);
     if (segs.length) out.push(group(segs));
-    if (segs.length && wt.isCurrent) out.push(hereChip(wt));
   }
   return out;
 }
@@ -323,6 +326,12 @@ function refChip(c: Commit, r: Commit['refs'][number], color: string, label = r.
     }
   }
   chip.dataset.vscodeContext = JSON.stringify(ctx);
+  chip.dataset.tip = c.hash;
+  chip.dataset.ref = r.name;
+  chip.dataset.kind = r.kind;
+  const isPinned = pinned?.name === r.name && pinned.kind === r.kind;
+  chip.classList.toggle('pinned', isPinned);
+  chip.title += isPinned ? '\nClick to clear the highlight' : '\nClick to highlight its history';
   return chip;
 }
 
@@ -358,7 +367,7 @@ function worktreeTitle(wt: Worktree): string {
 }
 
 /**
- * Worktree segment: `worktree-name`. Omitted when the repo has a single worktree (unless detached), where it would
+ * Worktree segment: `worktree-name`, filled when it's open in this window and hollow otherwise. Omitted when the repo has a single worktree (unless detached), where it would
  * only repeat the obvious.
  */
 function worktreeSegments(wt: Worktree, color: string): HTMLElement[] {
@@ -372,17 +381,6 @@ function worktreeSegments(wt: Worktree, color: string): HTMLElement[] {
   tag.title = worktreeTitle(wt);
   tag.dataset.vscodeContext = worktreeContext(wt);
   return [tag];
-}
-
-/** Standalone tag marking the worktree that's open in this window. */
-function hereChip(wt: Worktree): HTMLElement {
-  const here = document.createElement('span');
-  here.className = 'chip wt-here';
-  here.innerHTML = '<span class="codicon codicon-unlock"></span>';
-  here.append('open in this window');
-  here.title = worktreeTitle(wt);
-  here.dataset.vscodeContext = worktreeContext(wt);
-  return here;
 }
 
 function drawGraph(first: number, last: number, top: number, height: number): void {
@@ -410,27 +408,38 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
   const rLast = Math.min(n - 1, last + 1);
   const hasUncommitted = commits[0]?.hash === UNCOMMITTED;
 
-  const byColor = new Map<number, Path2D>();
-  const pathFor = (c: number) => { let p = byColor.get(c); if (!p) { p = new Path2D(); byColor.set(c, p); } return p; };
-  const dashed = new Map<number, Path2D>();
-  const dashedFor = (c: number) => { let p = dashed.get(c); if (!p) { p = new Path2D(); dashed.set(c, p); } return p; };
+  // Paths keyed by colour, and by whether they're dimmed (outside a highlighted branch's history).
+  const DIM = 0.2;
+  const keyed = (m: Map<string, Path2D>, c: number, dim: boolean) => { const k = `${c}|${dim ? 1 : 0}`; let p = m.get(k); if (!p) { p = new Path2D(); m.set(k, p); } return p; };
+  const solid = new Map<string, Path2D>();
+  const dashed = new Map<string, Path2D>();
   for (let r = rFirst; r <= rLast; r++) {
     const row = rows[r]!;
     const y0 = y(r - 1), y1 = y(r);
-    for (const e of row.edges) {
+    row.edges.forEach((e, k) => {
       // The strand leaving the uncommitted row is dashed until it reaches HEAD.
       const fromUncommitted = hasUncommitted && e.from === rows[0]!.lane && r <= (indexByHash.get(headHash ?? '') ?? -1) && e.color === rows[0]!.color;
-      addEdge(fromUncommitted ? dashedFor(e.color) : pathFor(e.color), x(e.from), y0, x(e.to), y1);
-    }
+      const dim = !!lit && !lit.edges[r]![k];
+      addEdge(keyed(fromUncommitted ? dashed : solid, e.color, dim), x(e.from), y0, x(e.to), y1);
+    });
   }
   if (hasMore && last >= n - 2 && n > 0) {
     const y0 = y(n - 1), y1 = y0 + rowH * 0.6;
-    for (const e of tail) addEdge(pathFor(e.color), x(e.from), y0, x(e.to), y1);
+    tail.forEach((e, k) => addEdge(keyed(solid, e.color, !!lit && !lit.tail[k]), x(e.from), y0, x(e.to), y1));
   }
-  for (const [c, p] of byColor) { g.strokeStyle = colorOf(c); g.stroke(p); }
+  const stroke = (m: Map<string, Path2D>) => {
+    for (const [k, p] of m) {
+      const [c, dim] = k.split('|');
+      g.globalAlpha = dim === '1' ? DIM : 1;
+      g.strokeStyle = colorOf(Number(c));
+      g.stroke(p);
+    }
+    g.globalAlpha = 1;
+  };
+  stroke(solid);
   if (dashed.size) {
     g.setLineDash([3, 3]);
-    for (const [c, p] of dashed) { g.strokeStyle = colorOf(c); g.stroke(p); }
+    stroke(dashed);
     g.setLineDash([]);
   }
 
@@ -441,6 +450,7 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
     const cx = x(row.lane), cy = y(r);
     if (cx < -8 || cx > width + 8) continue;
     const col = colorOf(row.color);
+    g.globalAlpha = lit && !lit.set.has(c.hash) ? DIM : 1;
     g.beginPath();
     if (c.hash === UNCOMMITTED) {
       g.arc(cx, cy, 4, 0, Math.PI * 2);
@@ -459,9 +469,10 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
     }
     if (c.hash === selected) {
       g.beginPath(); g.arc(cx, cy, 8, 0, Math.PI * 2);
-      g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.5; g.stroke(); g.globalAlpha = 1; g.lineWidth = 2;
+      g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha *= 0.5; g.stroke(); g.lineWidth = 2;
     }
   }
+  g.globalAlpha = 1;
   // Fade hint when more lanes are hidden to the right.
   if (graphFullWidth() - graphX > width + 1) {
     const grad = g.createLinearGradient(width - 14, 0, width, 0);
@@ -470,6 +481,78 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
     g.fillStyle = grad;
     g.fillRect(width - 14, 0, 14, height);
   }
+}
+
+// ---------- branch highlight ----------
+function highlightTip(): string | null {
+  return hoverTip ?? pinned?.hash ?? null;
+}
+
+/**
+ * Works out which commits and edges belong to the highlighted tip's history (its ancestors among the loaded
+ * commits). Walking down the rows, a lane is lit below a row if it carries the row's own lit commit or a lit strand
+ * passing through; an edge is lit if it leaves a lit lane. Cached until the tip or the loaded commits change.
+ */
+function computeLit(): void {
+  const tip = highlightTip();
+  if (!tip || !indexByHash.has(tip)) { lit = null; return; }
+  if (lit && lit.tip === tip && lit.commits === commits && lit.n === commits.length) return;
+  const set = new Set<string>();
+  const stack = [tip];
+  while (stack.length) {
+    const h = stack.pop()!;
+    if (set.has(h)) continue;
+    const i = indexByHash.get(h);
+    if (i === undefined) continue;
+    set.add(h);
+    for (const p of commits[i]!.parents) if (!set.has(p)) stack.push(p);
+  }
+  // The uncommitted changes sit on top of HEAD.
+  if (tip === headHash && commits[0]?.hash === UNCOMMITTED) set.add(UNCOMMITTED);
+  const edges: Uint8Array[] = new Array(rows.length);
+  let below = new Set<number>();
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r]!;
+    const flags = new Uint8Array(row.edges.length);
+    const next = new Set<number>();
+    row.edges.forEach((e, k) => {
+      if (!below.has(e.from)) return;
+      flags[k] = 1;
+      if (e.to !== row.lane) next.add(e.to); // a strand passing this row; one ending here lights nothing further
+    });
+    if (set.has(commits[r]!.hash)) next.add(row.lane);
+    edges[r] = flags;
+    below = next;
+  }
+  const tailFlags = new Uint8Array(tail.length);
+  tail.forEach((e, k) => { if (below.has(e.from)) tailFlags[k] = 1; });
+  lit = { tip, commits, n: commits.length, set, edges, tail: tailFlags };
+}
+
+function setPinned(p: typeof pinned): void {
+  pinned = p;
+  hoverTip = null;
+  $('hl').hidden = !p;
+  $('hl-name').textContent = p?.name ?? '';
+  render();
+}
+
+/** After a reload, follow the pinned ref to wherever it now points, or drop it if it's gone. */
+function refreshPinned(): void {
+  if (!pinned) return;
+  const p = pinned;
+  const c = commits.find((c) => c.refs.some((r) => r.kind === p.kind && r.name === p.name));
+  if (c) pinned = { ...p, hash: c.hash };
+  else if (!hasMore) setPinned(null);
+}
+
+let hoverTimer = 0;
+function setHover(tip: string | null): void {
+  clearTimeout(hoverTimer);
+  if (!tip) { if (hoverTip) { hoverTip = null; render(); } return; }
+  if (tip === hoverTip) return;
+  // A short delay so sweeping the pointer across tags doesn't flicker the graph.
+  hoverTimer = window.setTimeout(() => { hoverTip = tip; render(); }, hoverTip ? 0 : 150);
 }
 
 function addEdge(p: Path2D, x0: number, y0: number, x1: number, y1: number): void {
@@ -615,6 +698,12 @@ scroller.addEventListener('wheel', (e) => {
 }, { passive: false });
 rowsEl.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
+  const chip = t.closest<HTMLElement>('[data-tip]');
+  if (chip) {
+    const { tip, ref, kind } = chip.dataset;
+    setPinned(pinned && pinned.name === ref && pinned.kind === kind ? null : { kind: kind as Ref['kind'], name: ref!, hash: tip! });
+    return;
+  }
   if (t.closest('.c-hash')) { const row = t.closest<HTMLElement>('.row'); if (row?.dataset.hash && row.dataset.hash !== UNCOMMITTED) post({ type: 'copy', text: row.dataset.hash }); return; }
   const row = t.closest<HTMLElement>('.row');
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash);
@@ -626,6 +715,10 @@ rowsEl.addEventListener('contextmenu', (e) => {
   contextHash = row?.dataset.hash ?? null;
   render();
 });
+rowsEl.addEventListener('pointerover', (e) => setHover((e.target as HTMLElement).closest<HTMLElement>('[data-tip]')?.dataset.tip ?? null));
+rowsEl.addEventListener('pointerleave', () => setHover(null));
+scroller.addEventListener('scroll', () => setHover(null), { passive: true });
+$('hl-clear').onclick = () => setPinned(null);
 const clearContext = () => { if (contextHash) { contextHash = null; render(); } };
 for (const ev of ['pointerdown', 'keydown', 'blur', 'focus'] as const) window.addEventListener(ev, clearContext, true);
 for (const b of document.querySelectorAll<HTMLButtonElement>('#opbar [data-op]')) {
@@ -638,7 +731,7 @@ repoSel.onchange = () => post({ type: 'selectRepo', repo: repoSel.value });
 let filterTimer = 0;
 filterEl.oninput = () => { clearTimeout(filterTimer); filterTimer = window.setTimeout(() => { filterText = filterEl.value; rebuildView(); }, 80); };
 scroller.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { select(null); return; }
+  if (e.key === 'Escape') { if (selected || !pinned) select(null); else setPinned(null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
   e.preventDefault();
   const cur = selected ? view.indexOf(indexByHash.get(selected) ?? -1) : -1;
@@ -717,6 +810,7 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       hasMore = m.hasMore;
       maxLanes = m.maxLanes;
       rebuildIndexes();
+      refreshPinned();
       applyCss();
       rebuildView();
       if (pendingReveal) {

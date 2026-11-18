@@ -45,6 +45,8 @@ code --install-extension rgro.git-wave
 - **Stashes** appear as dashed nodes hanging off their base commit.
 - **Commit details** with changed files; click a file to open its diff. No dependency on the
   built-in Git extension.
+- **Highlight a branch.** Click a branch, remote or tag to dim everything that isn't in its history;
+  hover one for a preview. Esc clears it.
 - Instant filter by message, author, hash, or ref name. Resizable Author and Date columns.
 - Wide histories scroll horizontally inside the graph column (shift+wheel or the slim scrollbar).
 - Auto-refreshes when refs, HEAD, the working tree, or worktree metadata change.
