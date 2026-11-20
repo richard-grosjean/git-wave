@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { git } from './exec';
 import { LOG_FORMAT, parseBranchTracking, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
-import type { BranchTracking, Commit, MergeMode, OperationKind, OperationState, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
+import { UNCOMMITTED, type BranchTracking, type Commit, type MergeMode, type OperationKind, type OperationState, type CommitDetail, type CommitFile, type Stash, type Worktree } from '../shared/types';
 
 export interface LogOptions {
   skip: number;
@@ -92,6 +92,24 @@ export class Repository implements vscode.Disposable {
       body: (body ?? '').replace(/\n+$/, ''),
       files: parseNameStatusZ(files.stdout),
     };
+  }
+
+  /**
+   * Unified diff of one file: in a commit against its first parent, or for `UNCOMMITTED` the working tree
+   * against HEAD. An untracked file has no diff in git's eyes, so it's shown as entirely added.
+   */
+  async fileDiff(hash: string, relPath: string, status: string, oldPath?: string): Promise<string> {
+    const paths = oldPath && oldPath !== relPath ? [oldPath, relPath] : [relPath];
+    const opts = ['--no-color', '--no-ext-diff', '-M'];
+    if (hash !== UNCOMMITTED) {
+      return (await git(this.root, ['show', '--format=', ...opts, '-m', '--first-parent', hash, '--', ...paths])).stdout;
+    }
+    if (status !== '?') return (await git(this.root, ['diff', ...opts, 'HEAD', '--', ...paths])).stdout;
+    const buf = await fs.promises.readFile(path.join(this.root, relPath));
+    if (buf.subarray(0, 8000).includes(0)) return `Binary files /dev/null and b/${relPath} differ\n`;
+    const lines = buf.toString('utf8').split('\n');
+    if (lines[lines.length - 1] === '') lines.pop();
+    return `@@ -0,0 +1,${lines.length} @@\n${lines.map((l) => `+${l}`).join('\n')}\n`;
   }
 
   async fileAt(hash: string, relPath: string): Promise<string> {

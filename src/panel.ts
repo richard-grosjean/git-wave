@@ -135,6 +135,14 @@ export class GraphPanel implements vscode.Disposable {
         }
         try { this.post({ type: 'detail', detail: await repo.detail(m.hash) }); } catch (e) { this.post({ type: 'error', message: (e as Error).message }); }
         return;
+      case 'diff': {
+        if (!repo) return;
+        let text = '';
+        let error: string | undefined;
+        try { text = await repo.fileDiff(m.hash, m.path, m.status, m.oldPath); } catch (e) { error = (e as Error).message; }
+        this.post({ type: 'diff', hash: m.hash, path: m.path, text, error });
+        return;
+      }
       case 'openFile':
         if (repo) await this.openDiff(repo, m.hash, m.path, m.status, m.oldPath);
         return;

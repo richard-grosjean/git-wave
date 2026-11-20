@@ -4,7 +4,7 @@ declare function acquireVsCodeApi(): { postMessage(m: WebviewMessage): void; get
 const vscode = acquireVsCodeApi();
 const post = (m: WebviewMessage) => vscode.postMessage(m);
 
-interface PersistedState { colAuthor?: number; colDate?: number }
+interface PersistedState { colAuthor?: number; colDate?: number; detailH?: number; filesW?: number }
 const persisted: PersistedState = (vscode.getState() as PersistedState | undefined) ?? {};
 const persist = () => vscode.setState(persisted);
 
@@ -68,13 +68,30 @@ app.innerHTML = `
     <div id="empty" hidden>No commits.</div>
   </div>
   <div id="detail" hidden>
+    <div id="detail-resize" class="split-h" title="Drag to resize"></div>
     <div id="detail-head">
-      <span id="detail-hash" class="mono" title="Click to copy"></span>
-      <span id="detail-meta"></span>
-      <button id="detail-close" class="icon-btn" title="Close (Esc)"><span class="codicon codicon-close"></span></button>
+      <div id="detail-title">
+        <span id="detail-subject"></span>
+        <span id="detail-hash" class="mono" title="Click to copy"></span>
+        <button id="detail-close" class="icon-btn" title="Close (Esc)"><span class="codicon codicon-close"></span></button>
+      </div>
+      <div id="detail-meta"></div>
     </div>
-    <pre id="detail-body"></pre>
-    <div id="detail-files"></div>
+    <div id="detail-main">
+      <div id="detail-side">
+        <pre id="detail-body"></pre>
+        <div id="detail-files"></div>
+      </div>
+      <div id="detail-split" class="split-v" title="Drag to resize"></div>
+      <div id="diff-pane">
+        <div id="diff-head">
+          <span id="diff-path" class="mono"></span>
+          <span id="diff-stats" class="mono"></span>
+          <button id="diff-open" class="icon-btn" title="Open in diff editor"><span class="codicon codicon-go-to-file"></span></button>
+        </div>
+        <div id="diff"></div>
+      </div>
+    </div>
   </div>
   <div id="error" hidden></div>
 `;
@@ -108,6 +125,8 @@ function applyCss(): void {
   root.setProperty('--graph-w', `${graphVisibleWidth()}px`);
   root.setProperty('--col-author', `${persisted.colAuthor ?? 170}px`);
   root.setProperty('--col-date', `${persisted.colDate ?? 130}px`);
+  root.setProperty('--detail-h', persisted.detailH ? `${persisted.detailH}px` : '50vh');
+  root.setProperty('--files-w', `${persisted.filesW ?? 320}px`);
   const scrollable = graphFullWidth() > graphVisibleWidth();
   hscroll.hidden = !scrollable;
   hspacer.style.width = `${graphFullWidth()}px`;
@@ -560,6 +579,10 @@ function select(hash: string | null, scrollIntoView = false): void {
   render();
 }
 
+/** The detail pane's current file list and the file whose diff is shown. */
+let detailFiles: CommitFile[] = [];
+let activeFile: string | null = null;
+
 function showDetail(d: CommitDetail): void {
   if (d.hash !== selected) return;
   const i = indexByHash.get(d.hash);
@@ -567,16 +590,31 @@ function showDetail(d: CommitDetail): void {
   detailEl.hidden = false;
   const meta = $('detail-meta');
   meta.replaceChildren();
+  const hashEl = $('detail-hash');
+  let body = d.body;
   if (d.hash === UNCOMMITTED) {
-    $('detail-hash').textContent = 'Uncommitted changes';
-    meta.append('Working tree and index, relative to HEAD. Click a file to see its diff.');
+    $('detail-subject').textContent = 'Uncommitted changes';
+    hashEl.textContent = '';
+    meta.append('Working tree and index, relative to HEAD');
   } else {
-    $('detail-hash').textContent = d.hash;
+    // The subject is already the title; the body pane shows the rest of the message.
+    const nl = body.indexOf('\n');
+    $('detail-subject').textContent = nl < 0 ? body : body.slice(0, nl);
+    body = nl < 0 ? '' : body.slice(nl + 1).replace(/^\n+/, '');
+    hashEl.textContent = d.hash.slice(0, 8);
+    hashEl.title = `${d.hash}\nClick to copy`;
     if (c) {
-      meta.append(`${c.author} <${c.email}> · ${new Date(c.date * 1000).toLocaleString()}`);
-      if (d.committer && d.committer !== c.author) meta.append(` · committed by ${d.committer}`);
+      const who = document.createElement('span');
+      who.className = 'who';
+      if (config.avatars) { const av = document.createElement('span'); av.className = 'avatar'; renderAvatar(av, c); who.append(av); }
+      const name = document.createElement('span');
+      name.textContent = c.author;
+      name.title = c.email;
+      who.append(name);
+      meta.append(who, sep(), new Date(c.date * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+      if (d.committer && d.committer !== c.author) meta.append(sep(), `committed by ${d.committer}`);
       if (c.parents.length) {
-        meta.append(' · parents: ');
+        meta.append(sep(), c.parents.length > 1 ? 'parents ' : 'parent ');
         c.parents.forEach((p, k) => {
           const a = document.createElement('a'); a.href = '#'; a.className = 'mono'; a.textContent = p.slice(0, 8);
           a.onclick = (e) => { e.preventDefault(); revealHash(p); };
@@ -586,12 +624,20 @@ function showDetail(d: CommitDetail): void {
       }
     }
   }
-  $('detail-body').textContent = d.body;
-  $('detail-body').hidden = !d.body;
+  $('detail-body').textContent = body;
+  $('detail-body').hidden = !body;
   renderFiles(d.hash, d.files);
 }
 
+function sep(): HTMLElement {
+  const s = document.createElement('span');
+  s.className = 'sep';
+  s.textContent = '·';
+  return s;
+}
+
 function renderFiles(hash: string, list: CommitFile[]): void {
+  detailFiles = list;
   const files = $('detail-files');
   files.replaceChildren();
   const summary = document.createElement('div');
@@ -601,12 +647,99 @@ function renderFiles(hash: string, list: CommitFile[]): void {
   for (const f of list) {
     const line = document.createElement('div');
     line.className = `file status-${f.status}`;
-    line.innerHTML = `<span class="status" title="${statusName(f.status)}">${f.status === '?' ? 'U' : f.status}</span>`;
-    line.append(f.oldPath ? `${f.oldPath} → ${f.path}` : f.path);
-    line.title = 'Open diff';
-    line.onclick = () => post({ type: 'openFile', hash, path: f.path, status: f.status, oldPath: f.oldPath });
+    line.dataset.path = f.path;
+    const st = document.createElement('span');
+    st.className = 'status';
+    st.title = statusName(f.status);
+    st.textContent = f.status === '?' ? 'U' : f.status;
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = basename(f.path);
+    const slash = f.path.lastIndexOf('/');
+    const dir = document.createElement('span');
+    dir.className = 'dir';
+    dir.textContent = f.oldPath ? `${f.oldPath} →` : slash > 0 ? f.path.slice(0, slash) : '';
+    line.append(st, name, dir);
+    line.title = `${f.oldPath ? `${f.oldPath} → ` : ''}${f.path}\nDouble-click to open in the diff editor`;
+    line.onclick = () => showFile(hash, f);
+    line.ondblclick = () => post({ type: 'openFile', hash, path: f.path, status: f.status, oldPath: f.oldPath });
     files.append(line);
   }
+  // Keep the open file across refreshes; otherwise start with the first one.
+  const keep = list.find((f) => f.path === activeFile) ?? list[0];
+  if (keep) showFile(hash, keep);
+  else { activeFile = null; renderDiff(null, '', 'No changes.'); }
+}
+
+let diffFor: { hash: string; path: string } | null = null;
+let renderedDiff = '';
+function showFile(hash: string, f: CommitFile): void {
+  activeFile = f.path;
+  for (const el of document.querySelectorAll<HTMLElement>('#detail-files .file')) {
+    const on = el.dataset.path === f.path;
+    el.classList.toggle('active', on);
+    if (on) el.scrollIntoView({ block: 'nearest' });
+  }
+  $('diff-path').textContent = f.oldPath ? `${f.oldPath} → ${f.path}` : f.path;
+  $('diff-path').title = f.path;
+  $('diff-open').onclick = () => post({ type: 'openFile', hash, path: f.path, status: f.status, oldPath: f.oldPath });
+  diffFor = { hash, path: f.path };
+  $('diff').classList.add('loading');
+  post({ type: 'diff', hash, path: f.path, status: f.status, oldPath: f.oldPath });
+}
+
+const MAX_DIFF_LINES = 8000;
+/** Renders a unified diff with old/new line numbers; `note` replaces it (empty, binary, error). */
+function renderDiff(text: string | null, _path: string, note?: string): void {
+  const el = $('diff');
+  el.classList.remove('loading');
+  // A refresh of the same file (e.g. uncommitted changes being edited) keeps the scroll position.
+  const key = diffFor ? `${diffFor.hash}\0${diffFor.path}` : '';
+  const keepScroll = key === renderedDiff;
+  renderedDiff = key;
+  const [top, left] = [el.scrollTop, el.scrollLeft];
+  el.replaceChildren();
+  const stats = $('diff-stats');
+  stats.replaceChildren();
+  const message = (t: string) => { const m = document.createElement('div'); m.className = 'diff-note'; m.textContent = t; el.append(m); };
+  if (note || text === null) { message(note ?? ''); return; }
+  const table = document.createElement('div');
+  table.className = 'diff-table';
+  let o = 0, n = 0, adds = 0, dels = 0, count = 0, inHunk = false, binary = false, truncated = false;
+  const lines = text.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  const row = (cls: string, a: number | '', b: number | '', code: string) => {
+    const r = document.createElement('div');
+    r.className = `dl ${cls}`;
+    const la = document.createElement('span'); la.className = 'ln'; la.textContent = String(a);
+    const lb = document.createElement('span'); lb.className = 'ln'; lb.textContent = String(b);
+    const c = document.createElement('span'); c.className = 'code'; c.textContent = code;
+    r.append(la, lb, c);
+    table.append(r);
+  };
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/.exec(line);
+      if (m) { o = Number(m[1]); n = Number(m[2]); inHunk = true; if (count < MAX_DIFF_LINES) row('hunk', '', '', m[3] ? `⋯ ${m[3]}` : '⋯'); continue; }
+    }
+    if (!inHunk) { if (line.startsWith('Binary files')) binary = true; continue; }
+    const ch = line[0];
+    if (ch === '+') adds++;
+    else if (ch === '-') dels++;
+    if (++count > MAX_DIFF_LINES) { truncated = true; continue; }
+    if (ch === '+') row('add', '', n++, line.slice(1));
+    else if (ch === '-') row('del', o++, '', line.slice(1));
+    else if (ch === '\\') row('meta', '', '', line.slice(2));
+    else row('ctx', o++, n++, line.slice(1));
+  }
+  if (binary) { message('Binary file, not shown.'); return; }
+  if (!table.childElementCount) { message('No textual changes (mode or rename only).'); return; }
+  const add = document.createElement('span'); add.className = 'adds'; add.textContent = `+${adds}`;
+  const del = document.createElement('span'); del.className = 'dels'; del.textContent = `−${dels}`;
+  stats.append(add, ' ', del);
+  el.append(table);
+  if (keepScroll) { el.scrollTop = top; el.scrollLeft = left; } else { el.scrollTop = 0; el.scrollLeft = 0; }
+  if (truncated) message(`Diff truncated after ${MAX_DIFF_LINES} lines. Open it in the diff editor to see the rest.`);
 }
 
 function statusName(s: string): string {
@@ -717,6 +850,27 @@ scroller.addEventListener('keydown', (e) => {
   if (i !== undefined) select(commits[i]!.hash, true);
 });
 
+// Detail pane: drag its top edge for height, and the divider between files and diff for the list width.
+function dragResize(handle: HTMLElement, onMove: (ev: PointerEvent, start: PointerEvent) => void): void {
+  handle.addEventListener('pointerdown', (start) => {
+    start.preventDefault();
+    handle.setPointerCapture(start.pointerId);
+    handle.classList.add('dragging');
+    const move = (ev: PointerEvent) => { onMove(ev, start); applyCss(); scheduleRender(); };
+    const up = () => { handle.classList.remove('dragging'); handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); persist(); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+}
+{
+  let startH = 0, startW = 0;
+  const h = $('detail-resize'), v = $('detail-split');
+  h.addEventListener('pointerdown', () => { startH = detailEl.getBoundingClientRect().height; }, true);
+  v.addEventListener('pointerdown', () => { startW = $('detail-side').getBoundingClientRect().width; }, true);
+  dragResize(h, (ev, s) => { persisted.detailH = Math.round(Math.max(140, Math.min(window.innerHeight - 140, startH - (ev.clientY - s.clientY)))); });
+  dragResize(v, (ev, s) => { persisted.filesW = Math.round(Math.max(180, Math.min(detailEl.clientWidth - 240, startW + ev.clientX - s.clientX))); });
+}
+
 // Column resizing: drag the handle on the Author / Date headers.
 for (const handle of document.querySelectorAll<HTMLElement>('.resize')) {
   handle.addEventListener('pointerdown', (e) => {
@@ -806,7 +960,7 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       if (first?.hash === UNCOMMITTED) {
         first.subject = `Uncommitted changes (${m.files.length} file${m.files.length === 1 ? '' : 's'})`;
         render();
-        if (selected === UNCOMMITTED) renderFiles(UNCOMMITTED, m.files);
+        if (selected === UNCOMMITTED) renderFiles(UNCOMMITTED, m.files); // also refreshes the open file's diff
       }
       break;
     }
@@ -821,6 +975,9 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       break;
     case 'detail':
       showDetail(m.detail);
+      break;
+    case 'diff':
+      if (diffFor && diffFor.hash === m.hash && diffFor.path === m.path) renderDiff(m.error ? null : m.text, m.path, m.error);
       break;
     case 'operation':
       renderOperation(m.op);

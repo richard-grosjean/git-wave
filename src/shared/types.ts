@@ -125,6 +125,8 @@ export type HostMessage =
   | { type: 'commits'; repo: string; commits: Commit[]; rows: Row[]; tail: Edge[]; append: boolean; hasMore: boolean; maxLanes: number }
   | { type: 'worktrees'; worktrees: Worktree[] }
   | { type: 'detail'; detail: CommitDetail }
+  /** Unified diff of one file of a commit (or of the uncommitted changes), for the detail pane. */
+  | { type: 'diff'; hash: string; path: string; text: string; error?: string }
   | { type: 'avatars'; avatars: Record<string, string> }
   | { type: 'status'; files: CommitFile[] }
   | { type: 'loading'; loading: boolean }
@@ -144,6 +146,7 @@ export type WebviewMessage =
   | { type: 'selectRepo'; repo: string }
   | { type: 'select'; hash: string }
   | { type: 'openFile'; hash: string; path: string; status: string; oldPath?: string }
+  | { type: 'diff'; hash: string; path: string; status: string; oldPath?: string }
   | { type: 'copy'; text: string }
   | { type: 'worktree'; path: string; action: WorktreeAction }
   | { type: 'operation'; action: OperationAction };

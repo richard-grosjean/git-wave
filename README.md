@@ -43,8 +43,9 @@ code --install-extension rgro.git-wave
 - **Author avatars** from GitHub (using your `gh` CLI login when available, so no rate-limit
   trouble) or Gravatar, with initials as a fallback.
 - **Stashes** appear as dashed nodes hanging off their base commit.
-- **Commit details** with changed files; click a file to open its diff. No dependency on the
-  built-in Git extension.
+- **Commit details** in a resizable pane: the message, the changed files, and the selected file's
+  diff right beside them. Double-click a file to open it in VS Code's diff editor. No dependency on
+  the built-in Git extension.
 - **Highlight a branch.** Hover a branch, remote or tag to dim everything that isn't in its history.
 - Instant filter by message, author, hash, or ref name. Resizable Author and Date columns.
 - Wide histories scroll horizontally inside the graph column (shift+wheel or the slim scrollbar).

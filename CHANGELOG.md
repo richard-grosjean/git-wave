@@ -4,6 +4,7 @@
 
 - New merge option, **Merge without committing** (`--no-ff --no-commit`): the merge is staged but not committed, so you can look through what changed first. Press **Continue** in the banner to commit, or **Abort** to drop it.
 - The Merge picker now orders its options by your git config. With `merge.ff=false`, **Merge without committing** comes first, then **Merge with merge commit**. With `merge.ff=only`, **Fast-forward only** comes first. Otherwise a plain merge (fast-forward if possible) comes first. To always put one option first, set the new `gitwave.defaultMergeMode` setting (default `auto`).
+- The commit details pane is redesigned. It's taller and you can resize it by dragging its top edge. The subject, author and date sit in a header, the changed files are listed on the left, and the selected file's diff is shown on the right with line numbers. Drag the divider to resize the file list. Double-click a file, or use the button above the diff, to open it in VS Code's diff editor.
 - Branch highlighting is hover-only. Clicking a branch, remote or tag no longer pins the highlight. It selects the row like any other click.
 
 ## 0.7.0 (2026-11-18)
