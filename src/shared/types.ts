@@ -88,6 +88,9 @@ export interface CommitDetail {
   files: CommitFile[];
 }
 
+/** How `git merge` is run; 'default' passes no flag so git's own `merge.ff` config applies. */
+export type MergeMode = 'no-commit' | 'default' | 'no-ff' | 'squash' | 'ff-only';
+
 export type OperationKind = 'merge' | 'rebase' | 'cherry-pick' | 'revert';
 export type OperationAction = 'continue' | 'skip' | 'abort' | 'scm';
 

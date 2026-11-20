@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { GitError } from './git/exec';
 import type { Repository } from './git/repository';
-import type { OperationAction } from './shared/types';
+import type { MergeMode, OperationAction } from './shared/types';
 import { branchUrl, commitUrl, pullRequestUrl } from './git/remote-url';
 import { shortBranch } from './git/worktree-parse';
 
@@ -274,13 +274,30 @@ export class CommitActions {
     const repo = this.repoFor();
     if (!repo) return;
     const current = (await repo.currentBranch()) ?? 'HEAD';
-    type Pick = vscode.QuickPickItem & { mode: 'default' | 'no-ff' | 'squash' | 'ff-only' };
-    const pick = await vscode.window.showQuickPick<Pick>([
-      { label: 'Merge', description: 'fast-forward if possible', mode: 'default' },
-      { label: 'Merge with merge commit', description: '--no-ff', mode: 'no-ff' },
-      { label: 'Squash merge', description: '--squash, leaves changes staged', mode: 'squash' },
-      { label: 'Fast-forward only', description: '--ff-only', mode: 'ff-only' },
-    ], { title: `Merge ${ref} into ${current}` });
+    type Pick = vscode.QuickPickItem & { mode: MergeMode };
+    const ff = (await repo.configGet('merge.ff'))?.toLowerCase();
+    const noFf = ff === 'false' || ff === 'no' || ff === 'off' || ff === '0';
+    const ffOnly = ff === 'only';
+    const all: Record<MergeMode, Pick> = {
+      'no-commit': { label: 'Merge without committing', description: '--no-ff --no-commit, review the changes, then Continue to commit', mode: 'no-commit' },
+      default: { label: 'Merge', description: 'fast-forward if possible (your git config)', mode: 'default' },
+      'no-ff': { label: 'Merge with merge commit', description: noFf ? '--no-ff (your git config: merge.ff=false)' : '--no-ff', mode: 'no-ff' },
+      squash: { label: 'Squash merge', description: '--squash, leaves changes staged', mode: 'squash' },
+      'ff-only': { label: 'Fast-forward only', description: ffOnly ? '--ff-only (your git config: merge.ff=only)' : '--ff-only', mode: 'ff-only' },
+    };
+    // 'auto' orders the options by git's merge.ff. When it's false or only, a plain merge would be the same
+    // as --no-ff or --ff-only, so that duplicate is left out.
+    const setting = vscode.workspace.getConfiguration('gitwave').get<MergeMode | 'auto'>('defaultMergeMode', 'auto');
+    const order: MergeMode[] = noFf ? ['no-commit', 'no-ff', 'squash', 'ff-only']
+      : ffOnly ? ['ff-only', 'no-commit', 'no-ff', 'squash']
+      : ['default', 'no-commit', 'no-ff', 'squash', 'ff-only'];
+    if (setting !== 'auto') {
+      if (!order.includes(setting)) order.push(setting);
+      order.splice(order.indexOf(setting), 1);
+      order.unshift(setting); // the chosen default goes first so Enter picks it
+    }
+    const items = order.map((m) => all[m]);
+    const pick = await vscode.window.showQuickPick<Pick>(items, { title: `Merge ${ref} into ${current}` });
     if (!pick) return;
     await this.guard(`Merge ${ref}`, (r) => r.merge(ref, pick.mode));
   }

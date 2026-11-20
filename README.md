@@ -32,7 +32,7 @@ code --install-extension rgro.git-wave
 - **Uncommitted changes** row at the top with a dashed strand down to HEAD; select it to see the
   working-tree files and open their diffs. Right-click it to stash or discard the changes.
 - **Right-click actions** on commits, branches, remote branches, tags, stashes and worktree badges:
-  checkout, create branch, create tag, merge (fast-forward, merge commit, squash, ff-only), rebase,
+  checkout, create branch, create tag, merge (without committing, fast-forward, merge commit, squash, ff-only), rebase,
   cherry-pick, revert, reset (soft/mixed/hard), rename, delete, apply/pop/drop stash, copy.
   Native VS Code menus, so they follow your theme and keybindings.
 - **Remotes from the graph.** Push, pull and set upstream on branches, open a pull request

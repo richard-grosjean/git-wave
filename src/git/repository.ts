@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { git } from './exec';
 import { LOG_FORMAT, parseBranchTracking, parseLog, parseNameStatusZ, parseRepoPaths, parseStatusZ } from './parse';
 import { parseWorktreeList } from './worktree-parse';
-import type { BranchTracking, Commit, OperationKind, OperationState, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
+import type { BranchTracking, Commit, MergeMode, OperationKind, OperationState, CommitDetail, CommitFile, Stash, Worktree } from '../shared/types';
 
 export interface LogOptions {
   skip: number;
@@ -276,13 +276,19 @@ export class Repository implements vscode.Disposable {
   /** Drops the local remote-tracking ref only (`git branch -dr <remote>/<branch>`). */
   deleteRemoteTrackingRef(remoteBranch: string): Promise<unknown> { return git(this.root, ['branch', '-dr', remoteBranch]); }
   renameBranch(from: string, to: string): Promise<unknown> { return git(this.root, ['branch', '-m', from, to]); }
-  merge(ref: string, mode: 'default' | 'no-ff' | 'squash' | 'ff-only'): Promise<unknown> {
+  merge(ref: string, mode: MergeMode): Promise<unknown> {
     const args = ['merge'];
     if (mode === 'no-ff') args.push('--no-ff');
+    else if (mode === 'no-commit') args.push('--no-ff', '--no-commit');
     else if (mode === 'squash') args.push('--squash');
     else if (mode === 'ff-only') args.push('--ff-only');
     args.push('--no-edit', ref);
     return git(this.root, args);
+  }
+  /** A git config value as git resolves it for this repo (local, then global, then system), or undefined if unset. */
+  async configGet(key: string): Promise<string | undefined> {
+    const { stdout } = await git(this.root, ['config', '--get', key]).catch(() => ({ stdout: '' }));
+    return stdout.trim() || undefined;
   }
   rebase(onto: string): Promise<unknown> { return git(this.root, ['rebase', onto]); }
   cherryPick(hash: string, noCommit: boolean): Promise<unknown> {

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New merge option, **Merge without committing** (`--no-ff --no-commit`): the merge is staged but not committed, so you can look through what changed first. Press **Continue** in the banner to commit, or **Abort** to drop it.
+- The Merge picker now orders its options by your git config. With `merge.ff=false`, **Merge without committing** comes first, then **Merge with merge commit**. With `merge.ff=only`, **Fast-forward only** comes first. Otherwise a plain merge (fast-forward if possible) comes first. To always put one option first, set the new `gitwave.defaultMergeMode` setting (default `auto`).
+
 ## 0.7.0 (2026-11-18)
 
 - Click a branch, remote or tag to highlight its history: its commits and the lines leading to them stay bright, everything else dims. Hover a tag for a quick preview. Click it again, press Esc or use the ✕ in the toolbar to clear.

@@ -944,6 +944,20 @@
           "minimum": 50,
           "description": "Commits fetched per page. More are loaded as you scroll."
         },
+        "gitwave.defaultMergeMode": {
+          "type": "string",
+          "enum": ["auto", "no-commit", "default", "no-ff", "squash", "ff-only"],
+          "enumDescriptions": [
+            "Follow git's merge.ff: if it's false, Merge without committing then Merge with merge commit come first; if it's only, Fast-forward only comes first; otherwise a plain merge (fast-forward if possible).",
+            "Merge without committing (--no-ff --no-commit): review the merged changes, then Continue to commit.",
+            "Plain git merge: follows your git config (merge.ff), fast-forwarding when possible by default.",
+            "Always create a merge commit (--no-ff).",
+            "Squash merge (--squash), leaving the changes staged.",
+            "Fast-forward only (--ff-only)."
+          ],
+          "default": "auto",
+          "description": "Which merge option is listed first (and picked by Enter) in the Merge picker."
+        },
         "gitwave.showRemoteBranches": {
           "type": "boolean",
           "default": true,
