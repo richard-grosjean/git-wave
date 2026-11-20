@@ -45,12 +45,6 @@ body {
 .op-btn.primary:hover { background: var(--vscode-button-hoverBackground); }
 .op-btn[hidden] { display: none; }
 #toolbar input:focus, #toolbar select:focus { outline: 1px solid var(--vscode-focusBorder); }
-#hl {
-  display: inline-flex; align-items: center; gap: 4px; padding: 0 2px 0 6px; border-radius: 3px; white-space: nowrap;
-  border: 1px solid var(--vscode-focusBorder); max-width: 240px;
-}
-#hl[hidden] { display: none; }
-#hl-name { overflow: hidden; text-overflow: ellipsis; }
 #count { opacity: 0.6; margin-left: auto; font-variant-numeric: tabular-nums; }
 .icon-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 3px; border-radius: 3px; display: inline-flex; }
 .icon-btn:hover { background: var(--vscode-toolbar-hoverBackground); }
@@ -133,8 +127,6 @@ body {
 .chip.wt { border-color: var(--chip); background: transparent; color: var(--vscode-descriptionForeground); }
 .chip.wt.is-current { background: var(--chip); color: var(--vscode-editor-background); font-weight: 600; }
 .ref-group > .chip + .chip.wt.is-current { border-left-color: color-mix(in srgb, var(--vscode-editor-background) 45%, var(--chip)); }
-.chip[data-tip] { cursor: pointer; }
-.chip.pinned { box-shadow: 0 0 0 1px var(--vscode-focusBorder); position: relative; z-index: 1; }
 .chip.wt .lock { color: var(--vscode-editorWarning-foreground, #e3b341); }
 
 /* detail pane */

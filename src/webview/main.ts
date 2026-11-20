@@ -28,8 +28,7 @@ let contextHash: string | null = null;
 let pendingReveal: string | null = null;
 let revealAttempts = 0;
 let headHash: string | null = null;
-/** Ref whose history is highlighted (clicked chip), and a hovered chip's commit previewing its own. */
-let pinned: { kind: Ref['kind']; name: string; hash: string } | null = null;
+/** Commit of the hovered ref chip, whose history is highlighted. */
 let hoverTip: string | null = null;
 /** Highlighted ancestry: commits reachable from the tip, plus which edges of each row lead into them. */
 let lit: { tip: string; commits: Commit[]; n: number; set: Set<string>; edges: Uint8Array[]; tail: Uint8Array } | null = null;
@@ -42,7 +41,6 @@ app.innerHTML = `
   <div id="toolbar">
     <select id="repo" title="Repository"></select>
     <input id="filter" type="search" placeholder="Filter by message, author, hash or ref…" spellcheck="false">
-    <span id="hl" hidden><span class="codicon codicon-git-branch"></span><span id="hl-name"></span><button id="hl-clear" class="icon-btn" title="Clear highlight (Esc)"><span class="codicon codicon-close"></span></button></span>
     <span id="count"></span>
     <span id="spinner" class="codicon codicon-loading codicon-modifier-spin" hidden></span>
     <button id="fetch" class="icon-btn" title="Fetch all remotes"><span class="codicon codicon-cloud-download"></span><span id="fetch-age"></span></button>
@@ -331,11 +329,6 @@ function refChip(c: Commit, r: Commit['refs'][number], color: string, label = r.
   }
   chip.dataset.vscodeContext = JSON.stringify(ctx);
   chip.dataset.tip = c.hash;
-  chip.dataset.ref = r.name;
-  chip.dataset.kind = r.kind;
-  const isPinned = pinned?.name === r.name && pinned.kind === r.kind;
-  chip.classList.toggle('pinned', isPinned);
-  chip.title += isPinned ? '\nClick to clear the highlight' : '\nClick to highlight its history';
   return chip;
 }
 
@@ -489,7 +482,7 @@ function drawGraph(first: number, last: number, top: number, height: number): vo
 
 // ---------- branch highlight ----------
 function highlightTip(): string | null {
-  return hoverTip ?? pinned?.hash ?? null;
+  return hoverTip;
 }
 
 /**
@@ -531,23 +524,6 @@ function computeLit(): void {
   const tailFlags = new Uint8Array(tail.length);
   tail.forEach((e, k) => { if (below.has(e.from)) tailFlags[k] = 1; });
   lit = { tip, commits, n: commits.length, set, edges, tail: tailFlags };
-}
-
-function setPinned(p: typeof pinned): void {
-  pinned = p;
-  hoverTip = null;
-  $('hl').hidden = !p;
-  $('hl-name').textContent = p?.name ?? '';
-  render();
-}
-
-/** After a reload, follow the pinned ref to wherever it now points, or drop it if it's gone. */
-function refreshPinned(): void {
-  if (!pinned) return;
-  const p = pinned;
-  const c = commits.find((c) => c.refs.some((r) => r.kind === p.kind && r.name === p.name));
-  if (c) pinned = { ...p, hash: c.hash };
-  else if (!hasMore) setPinned(null);
 }
 
 let hoverTimer = 0;
@@ -706,12 +682,6 @@ scroller.addEventListener('wheel', (e) => {
 }, { passive: false });
 rowsEl.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
-  const chip = t.closest<HTMLElement>('[data-tip]');
-  if (chip) {
-    const { tip, ref, kind } = chip.dataset;
-    setPinned(pinned && pinned.name === ref && pinned.kind === kind ? null : { kind: kind as Ref['kind'], name: ref!, hash: tip! });
-    return;
-  }
   if (t.closest('.c-hash')) { const row = t.closest<HTMLElement>('.row'); if (row?.dataset.hash && row.dataset.hash !== UNCOMMITTED) post({ type: 'copy', text: row.dataset.hash }); return; }
   const row = t.closest<HTMLElement>('.row');
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash);
@@ -726,7 +696,6 @@ rowsEl.addEventListener('contextmenu', (e) => {
 rowsEl.addEventListener('pointerover', (e) => setHover((e.target as HTMLElement).closest<HTMLElement>('[data-tip]')?.dataset.tip ?? null));
 rowsEl.addEventListener('pointerleave', () => setHover(null));
 scroller.addEventListener('scroll', () => setHover(null), { passive: true });
-$('hl-clear').onclick = () => setPinned(null);
 const clearContext = () => { if (contextHash) { contextHash = null; render(); } };
 for (const ev of ['pointerdown', 'keydown', 'blur', 'focus'] as const) window.addEventListener(ev, clearContext, true);
 for (const b of document.querySelectorAll<HTMLButtonElement>('#opbar [data-op]')) {
@@ -739,7 +708,7 @@ repoSel.onchange = () => post({ type: 'selectRepo', repo: repoSel.value });
 let filterTimer = 0;
 filterEl.oninput = () => { clearTimeout(filterTimer); filterTimer = window.setTimeout(() => { filterText = filterEl.value; rebuildView(); }, 80); };
 scroller.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (selected || !pinned) select(null); else setPinned(null); return; }
+  if (e.key === 'Escape') { select(null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
   e.preventDefault();
   const cur = selected ? view.indexOf(indexByHash.get(selected) ?? -1) : -1;
@@ -818,7 +787,6 @@ window.addEventListener('message', (e: MessageEvent<HostMessage>) => {
       hasMore = m.hasMore;
       maxLanes = m.maxLanes;
       rebuildIndexes();
-      refreshPinned();
       applyCss();
       rebuildView();
       if (pendingReveal) {
